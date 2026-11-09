@@ -1,0 +1,36 @@
+From: kanata-nicola
+Date: Sun, 1 Nov 2026 12:08:23 +0900
+Subject: [PATCH] fix(linux): rescan /dev/input when a device node's permissions change
+
+A device node is created by the kernel readable by root only; udev sets its
+group (input) and mode a moment later. kanata running as a user in the input
+group rescans 200 ms (--wait-device-ms) after the inotify CREATE event; when
+udev is slower than that (e.g. right after resume, or several devices behind a
+USB hub at once), evdev::enumerate() cannot open the node and silently skips
+it, and nothing triggers another rescan until some other device appears. The
+keyboard then stays unmapped.
+
+Also watch ATTRIB on /dev/input, so that the permission change made by udev
+triggers a rescan as well.
+
+Reproduce: run kanata as a non-root user with --wait-device-ms 0 and replug a
+keyboard; without this change it is never grabbed again.
+---
+--- a/src/oskbd/linux.rs
++++ b/src/oskbd/linux.rs
+@@ -765,7 +765,14 @@
+ 
+ fn watch_devinput() -> Result<Inotify, io::Error> {
+     let inotify = Inotify::init().expect("Failed to initialize inotify");
+-    inotify.watches().add("/dev/input", WatchMask::CREATE)?;
++    // CREATE: a device node appeared. ATTRIB: its owner, mode or ACL changed. A new node is created
++    // by the kernel readable by root only; udev gives it its group (e.g. input) a moment later. When
++    // kanata runs as a user in that group and looks before udev is done, the device cannot be opened
++    // yet and is skipped, and without ATTRIB nothing triggers another look until some other device
++    // appears.
++    inotify
++        .watches()
++        .add("/dev/input", WatchMask::CREATE | WatchMask::ATTRIB)?;
+     Ok(inotify)
+ }
+ 

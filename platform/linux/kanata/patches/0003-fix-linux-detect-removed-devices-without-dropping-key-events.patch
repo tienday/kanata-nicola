@@ -1,0 +1,41 @@
+From: kanata-nicola
+Date: Mon, 26 Oct 2026 06:11:55 +0900
+Subject: [PATCH] fix(linux): detect removed devices without dropping queued key events
+
+remove_stale_devices() (added in #2129) calls get_key_state(), i.e. the
+EVIOCGKEY ioctl, on every registered device at each rescan to find the ones
+that report ENODEV. Before returning the key state, Linux evdev flushes the
+EV_KEY events still queued for the calling client (evdev_handle_get_val ->
+__evdev_flush_queue), without a SYN_DROPPED. kanata reads its devices on that
+same fd, so key presses or releases that arrived after the last read and
+before the rescan are silently lost. A rescan runs on every inotify event in
+/dev/input, so connecting any input device can drop a key event on all
+keyboards; a lost release leaves the key held inside kanata.
+
+Use EVIOCGID instead: every evdev ioctl fails with ENODEV once the device is
+gone, and EVIOCGID only reads the device id.
+
+Reproduce: grab an evdev device, let it queue a key press and release, call
+EVIOCGKEY before reading: the two events are gone (EVIOCGID keeps them).
+---
+--- a/src/oskbd/linux.rs
++++ b/src/oskbd/linux.rs
+@@ -266,12 +266,17 @@
+     /// the same path is not mistaken for the still-registered dead one. Needed when the
+     /// inotify CREATE for the new node is processed before the old fd reports ENODEV.
+     fn remove_stale_devices(&mut self) {
++        // Any evdev ioctl fails with ENODEV once the device is gone. Use EVIOCGID, which only reads the
++        // device id: EVIOCGKEY (get_key_state) also drops the key events queued on this fd that kanata
++        // has not read yet, so a key press or release arriving just before a rescan would be lost.
++        nix::ioctl_read!(eviocgid, b'E', 0x02, [u16; 4]);
+         let stale_tokens = self
+             .devices
+             .iter()
+             .filter(|(_, (dev, _))| {
+                 // Only ENODEV means the device is gone; on any other error keep the device.
+-                matches!(dev.get_key_state(), Err(ref e) if e.raw_os_error() == Some(nix::libc::ENODEV))
++                let mut id = [0u16; 4];
++                matches!(unsafe { eviocgid(dev.as_raw_fd(), &mut id) }, Err(nix::errno::Errno::ENODEV))
+             })
+             .map(|(token, _)| *token)
+             .collect::<Vec<_>>();

@@ -1,0 +1,31 @@
+# NICOLA J型への配列差分ファイル: 離し遅れの対策（標準配列と異なる配置になる）
+# practical.toml の上に重ねる。説明と書式は docs/layout-overlays.md。
+#
+# 指定の例: NICOLA_LAYOUT_OVERLAYS=practical:lag-tolerant（kanata 設定生成器では --overlay で practical.toml の後に指定する）
+
+[meta]
+name = "lag-tolerant"
+
+# ---- シフト面を単独面と同じ文字にする ----
+
+[keys.KEY_C]           # B03: 右親指 ず → す
+right = "す"
+
+[keys.KEY_L]           # C09: 左親指 ぽ → い
+left = "い"
+
+# ---- 押し出された文字の移動先 ----
+
+[keys.KEY_Z]           # B01: 単独 ． → ぽ、右親指（未定義）→ ず
+solo = "ぽ"
+right = "ず"
+
+# ---- 数字段の記号を未定義にする ----
+
+[keys.KEY_0]           # E10: 左親指・右親指 『 → 未定義
+left = ""
+right = ""
+
+[keys.KEY_MINUS]       # E11: 左親指・右親指 』 → 未定義
+left = ""
+right = ""

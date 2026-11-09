@@ -1,0 +1,33 @@
+# NICOLA J型への配列差分ファイル: 使用頻度による配置の調整（標準配列と異なる配置になる）
+# 説明と書式は docs/layout-overlays.md。
+#
+# 指定の例: NICOLA_LAYOUT_OVERLAYS=practical（kanata 設定生成器では --overlay layouts/overlays/practical.toml）
+
+[meta]
+name = "practical"
+
+# ---- 使用頻度による配置の変更 ----
+
+[keys.KEY_COMMA]       # B08: 単独 ね → っ
+solo = "っ"
+
+[keys.KEY_SEMICOLON]   # C10: 右親指 っ → 未定義
+right = ""
+
+[keys.KEY_X]           # B02: 左親指 ー → ね
+left = "ね"
+
+[keys.KEY_P]           # D10: 単独 ， → 、
+solo = "、"
+
+# ---- 濁点・半濁点だけの面を未定義にする ----
+
+[keys.KEY_RIGHTBRACE]  # D12（JIS の「[」キー）: 単独 ゛・右親指 ゜ → 未定義
+solo = ""
+right = ""
+
+[keys.KEY_SLASH]       # B10: 左親指 ゛ → 未定義
+left = ""
+
+[keys.KEY_Q]           # D01: 右親指 ゜ → 未定義
+right = ""

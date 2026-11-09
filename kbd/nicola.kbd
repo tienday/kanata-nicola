@@ -1,0 +1,279 @@
+;; kanata-nicola — 親指シフト（NICOLA）の kanata 設定
+;; SPDX-License-Identifier: MIT OR Apache-2.0
+;;
+;; kanata 設定生成器（このリポジトリの crates/nicola-kbdgen）で生成した設定ファイル。
+;; 編集と再生成の方法は docs/kanata-kbd.md、仕組みは docs/kanata-kbd-design.md。
+;;
+;; 配列:     NICOLA J型（NICOLA配列規格書 2000-01-08 + 2018-11正誤、数字段は JIS 提案の J型図＋〜『』の追加）
+;; 判定方式: 親指先行（親指キーを押してから文字キーを押すとシフト面。文字は押した瞬間に入力される）
+;; 送出:     ローマ字（IME はローマ字入力にする）
+;; 親指キー: 左 = mhnk（無変換）、右 = henk（変換）
+;; 切り替え: grv（半角/全角）で NICOLA の ON/OFF（キー本来の出力も送出する）
+;; 起動時:   NICOLA は OFF（base レイヤ）
+;; 非常停止: 左Ctrl+Space+Esc（kanata の標準）
+;;
+;; 構成:
+;;   1. 環境固有設定      対象にするキーボード、Ctrl として扱うキー
+;;   2. 扱うキー          defsrc、修飾キーの条件
+;;   3. 配列              レイヤ（キー → 文字）
+;;   4. 親指キー          親指の面の切り替え、親指の単独打鍵
+;;   5. NICOLA の ON/OFF  基本レイヤ（base・nicola）の切り替え
+;;   6. 文字の送出        文字 → IME に送出するキー列
+
+;; ==== 1. 環境固有設定 ====
+;; user-custom.kbd に記述する。
+(include user-custom.kbd)
+
+;; ==== 2. 扱うキー ====
+;; defsrc に無いキー（Enter・BackSpace 等）は、そのまま出力される。
+(defsrc
+  1 2 3 4 5 6 7 8 9 0 min
+  q w e r t y u i o p [ ]
+  a s d f g h j k l scln
+  z x c v b n m comm . /
+  mhnk henk grv
+  lctl rctl lalt ralt lmet rmet lsft rsft caps
+)
+
+(defvar
+  ;; 修飾キー（Shift を含む）。押している間は、文字キー・親指キーをそのまま出力する。
+  modifiers ((input real lctl) (input real rctl) (input real lalt) (input real ralt) (input real lmet) (input real rmet) (input real lsft) (input real rsft) $keys-as-ctrl)
+)
+
+;; ==== 3. 配列 ====
+;; キーの定義は「キー (t! テンプレート キー 文字)」。文字は、節 6 で定義する alias の名前（kanata が送出するのは、その文字のキー列）。
+;; テンプレート（修飾キーを押している間は、どれもキーをそのまま出力する）:
+;;   unshifted    単独面の文字
+;;   shifted      親指の面の文字。親指の単独打鍵を取り消す（節 4）
+;;   shifted-raw  送出できる文字の無い親指の面。キーをそのまま出力し、親指の単独打鍵を取り消す
+;; 最初に定義したレイヤが、起動時のレイヤになる。
+(deftemplate unshifted (key char)
+  (switch $modifiers $key break () (concat @ $char) break))
+(deftemplate shifted (key char)
+  (multi (on-press press-vkey lthumb-used) (on-press press-vkey rthumb-used)
+         (switch $modifiers $key break () (concat @ $char) break)))
+(deftemplate shifted-raw (key)
+  (multi (on-press press-vkey lthumb-used) (on-press press-vkey rthumb-used) $key))
+
+;; base: NICOLA OFF。NICOLA 切替キーだけを定義する（ほかのキーはそのまま出力される）。
+(deflayermap (base)
+  grv @nicola-on
+)
+
+;; nicola: NICOLA ON。単独面。送出できる文字の無い単独面は、キーそのものを記述する（例: 1 1）。
+(deflayermap (nicola)
+  1 1  2 2  3 3  4 4  5 5
+  6 6  7 7  8 8  9 9  0 0  min min
+  q (t! unshifted q 。)  w (t! unshifted w か)  e (t! unshifted e た)  r (t! unshifted r こ)  t (t! unshifted t さ)
+  y (t! unshifted y ら)  u (t! unshifted u ち)  i (t! unshifted i く)  o (t! unshifted o つ)  p (t! unshifted p ，)  [ (t! unshifted [ 、)  ] ]
+  a (t! unshifted a う)  s (t! unshifted s し)  d (t! unshifted d て)  f (t! unshifted f け)  g (t! unshifted g せ)
+  h (t! unshifted h は)  j (t! unshifted j と)  k (t! unshifted k き)  l (t! unshifted l い)  scln (t! unshifted scln ん)
+  z (t! unshifted z ．)  x (t! unshifted x ひ)  c (t! unshifted c す)  v (t! unshifted v ふ)  b (t! unshifted b へ)
+  n (t! unshifted n め)  m (t! unshifted m そ)  comm (t! unshifted comm ね)  . (t! unshifted . ほ)  / (t! unshifted / ・)
+  mhnk @lthumb  henk @rthumb  grv @nicola-off
+)
+
+;; nicola-lthumb: 左の親指キー（mhnk）を押している間。左親指の面（記述していないキーは nicola のまま）。
+(deflayermap (nicola-lthumb)
+  1 (t! shifted 1 ？)  2 (t! shifted 2 ／)  3 (t! shifted 3 〜)  4 (t! shifted 4 「)  5 (t! shifted 5 」)
+  6 (t! shifted 6 ｛)  7 (t! shifted 7 ｝)  8 (t! shifted 8 （)  9 (t! shifted 9 ）)  0 (t! shifted 0 『)  min (t! shifted min 』)
+  q (t! shifted q ぁ)  w (t! shifted w え)  e (t! shifted e り)  r (t! shifted r ゃ)  t (t! shifted t れ)
+  y (t! shifted y ぱ)  u (t! shifted u ぢ)  i (t! shifted i ぐ)  o (t! shifted o づ)  p (t! shifted p ぴ)  [ (t! shifted [ 、)  ] (t! shifted-raw ])
+  a (t! shifted a を)  s (t! shifted s あ)  d (t! shifted d な)  f (t! shifted f ゅ)  g (t! shifted g も)
+  h (t! shifted h ば)  j (t! shifted j ど)  k (t! shifted k ぎ)  l (t! shifted l ぽ)  scln (t! shifted scln ん)
+  z (t! shifted z ぅ)  x (t! shifted x ー)  c (t! shifted c ろ)  v (t! shifted v や)  b (t! shifted b ぃ)
+  n (t! shifted n ぷ)  m (t! shifted m ぞ)  comm (t! shifted comm ぺ)  . (t! shifted . ぼ)  / (t! shifted-raw /)
+)
+
+;; nicola-rthumb: 右の親指キー（henk）を押している間。右親指の面（記述していないキーは nicola のまま）。
+(deflayermap (nicola-rthumb)
+  1 (t! shifted 1 ？)  2 (t! shifted 2 ／)  3 (t! shifted 3 〜)  4 (t! shifted 4 「)  5 (t! shifted 5 」)
+  6 (t! shifted 6 ｛)  7 (t! shifted 7 ｝)  8 (t! shifted 8 （)  9 (t! shifted 9 ）)  0 (t! shifted 0 『)  min (t! shifted min 』)
+  q (t! shifted-raw q)  w (t! shifted w が)  e (t! shifted e だ)  r (t! shifted r ご)  t (t! shifted t ざ)
+  y (t! shifted y よ)  u (t! shifted u に)  i (t! shifted i る)  o (t! shifted o ま)  p (t! shifted p ぇ)  [ (t! shifted [ 、)  ] (t! shifted-raw ])
+  a (t! shifted a う)  s (t! shifted s じ)  d (t! shifted d で)  f (t! shifted f げ)  g (t! shifted g ぜ)
+  h (t! shifted h み)  j (t! shifted j お)  k (t! shifted k の)  l (t! shifted l ょ)  scln (t! shifted scln っ)
+  z (t! shifted z ．)  x (t! shifted x び)  c (t! shifted c ず)  v (t! shifted v ぶ)  b (t! shifted b べ)
+  n (t! shifted n ぬ)  m (t! shifted m ゆ)  comm (t! shifted comm む)  . (t! shifted . わ)  / (t! shifted / ぉ)
+)
+
+;; ==== 4. 親指キー ====
+;; 押している間、その親指の面のレイヤを有効にする。文字キーを押さずに離したときは、親指の単独打鍵（mhnk・henk）を送出する。
+(defvirtualkeys
+  lthumb-used XX
+  lthumb-tap (switch ((input virtual lthumb-used)) XX break $modifiers XX break () mhnk break)
+  rthumb-used XX
+  rthumb-tap (switch ((input virtual rthumb-used)) XX break $modifiers XX break () henk break)
+)
+(defalias
+  lthumb (switch
+    $modifiers mhnk break
+    () (multi (on-press release-vkey lthumb-used) (layer-while-held nicola-lthumb) (on-release tap-vkey lthumb-tap)) break)
+  rthumb (switch
+    $modifiers henk break
+    () (multi (on-press release-vkey rthumb-used) (layer-while-held nicola-rthumb) (on-release tap-vkey rthumb-tap)) break)
+)
+
+;; ==== 5. NICOLA の ON/OFF ====
+;; grv（半角/全角）で切り替える（キー本来の出力も送出する）。
+(defalias
+  nicola-on (multi grv (layer-switch nicola))
+  nicola-off (multi grv (layer-switch base))
+)
+
+;; ==== 6. 文字の送出 ====
+;; 文字ごとに、IME（ローマ字入力）に送出するキー列を、次の 2 行で定義する（2 行の引数は同じにする）:
+;;   (defvirtualkeys (t! keys2 か k a))
+;;   (defalias       (t! send2 か k a))
+;; 数字は、送出のキー列のキーの数（lsft も数える。か = k a は 2、？ = lsft / は 2）。
+;; 同じキー列を送出する文字: 「／」と「・」（/）、「。」と「．」（.）、「，」と「、」（comm）。どちらが入力されるかは IME の設定（句読点、記号の入力）で決まる。
+(deftemplate keys1 (char k1)
+  (concat up- $char) (multi (release-key $k1))
+  (concat down- $char) (multi $k1 (on-press tap-vkey (concat up- $char))))
+(deftemplate keys2 (char k1 k2)
+  (concat up- $char) (multi (release-key $k1) (release-key $k2))
+  (concat down- $char) (multi $k1 $k2 (on-press tap-vkey (concat up- $char))))
+(deftemplate keys3 (char k1 k2 k3)
+  (concat up- $char) (multi (release-key $k1) (release-key $k2) (release-key $k3))
+  (concat down- $char) (multi $k1 $k2 $k3 (on-press tap-vkey (concat up- $char))))
+(deftemplate send1 (char k1)
+  $char (switch ($k1 lsft)
+    (multi (release-key $k1) (on-press tap-vkey (concat down- $char))) break
+    () (multi $k1 (on-press tap-vkey (concat up- $char))) break))
+(deftemplate send2 (char k1 k2)
+  $char (switch ($k1 $k2 lsft)
+    (multi (release-key $k1) (release-key $k2) (on-press tap-vkey (concat down- $char))) break
+    () (multi $k1 $k2 (on-press tap-vkey (concat up- $char))) break))
+(deftemplate send3 (char k1 k2 k3)
+  $char (switch ($k1 $k2 $k3 lsft)
+    (multi (release-key $k1) (release-key $k2) (release-key $k3) (on-press tap-vkey (concat down- $char))) break
+    () (multi $k1 $k2 $k3 (on-press tap-vkey (concat up- $char))) break))
+;; キーごとに、そのキーの面に記述されている文字を定義する（同じ文字は最初のキーで 1 回）。
+;; コメントは「位置 キー: 単独 / 左親指 / 右親指」（未定義の親指の面では、単独面の文字が入力される）。
+;; E01 1: 未定義 / ？ / ？
+(defvirtualkeys (t! keys2 ？ lsft /))
+(defalias       (t! send2 ？ lsft /))
+;; E02 2: 未定義 / ／ / ／
+(defvirtualkeys (t! keys1 ／ /))
+(defalias       (t! send1 ／ /))
+;; E03 3: 未定義 / 〜 / 〜
+(defvirtualkeys (t! keys2 〜 z min))
+(defalias       (t! send2 〜 z min))
+;; E04 4: 未定義 / 「 / 「
+(defvirtualkeys (t! keys1 「 ]))
+(defalias       (t! send1 「 ]))
+;; E05 5: 未定義 / 」 / 」
+(defvirtualkeys (t! keys1 」 \))
+(defalias       (t! send1 」 \))
+;; E06 6: 未定義 / ｛ / ｛
+(defvirtualkeys (t! keys2 ｛ lsft ]))
+(defalias       (t! send2 ｛ lsft ]))
+;; E07 7: 未定義 / ｝ / ｝
+(defvirtualkeys (t! keys2 ｝ lsft \))
+(defalias       (t! send2 ｝ lsft \))
+;; E08 8: 未定義 / （ / （
+(defvirtualkeys (t! keys2 （ lsft 8))
+(defalias       (t! send2 （ lsft 8))
+;; E09 9: 未定義 / ） / ）
+(defvirtualkeys (t! keys2 ） lsft 9))
+(defalias       (t! send2 ） lsft 9))
+;; E10 0: 未定義 / 『 / 『
+(defvirtualkeys (t! keys2 『 z ]))
+(defalias       (t! send2 『 z ]))
+;; E11 min: 未定義 / 』 / 』
+(defvirtualkeys (t! keys2 』 z \))
+(defalias       (t! send2 』 z \))
+;; D01 q: 。 / ぁ / ゜（゜ は送出できないため、キーそのものを出力する）
+(defvirtualkeys (t! keys1 。 .)  (t! keys2 ぁ x a))
+(defalias       (t! send1 。 .)  (t! send2 ぁ x a))
+;; D02 w: か / え / が
+(defvirtualkeys (t! keys2 か k a)  (t! keys1 え e)  (t! keys2 が g a))
+(defalias       (t! send2 か k a)  (t! send1 え e)  (t! send2 が g a))
+;; D03 e: た / り / だ
+(defvirtualkeys (t! keys2 た t a)  (t! keys2 り r i)  (t! keys2 だ d a))
+(defalias       (t! send2 た t a)  (t! send2 り r i)  (t! send2 だ d a))
+;; D04 r: こ / ゃ / ご
+(defvirtualkeys (t! keys2 こ k o)  (t! keys3 ゃ x y a)  (t! keys2 ご g o))
+(defalias       (t! send2 こ k o)  (t! send3 ゃ x y a)  (t! send2 ご g o))
+;; D05 t: さ / れ / ざ
+(defvirtualkeys (t! keys2 さ s a)  (t! keys2 れ r e)  (t! keys2 ざ z a))
+(defalias       (t! send2 さ s a)  (t! send2 れ r e)  (t! send2 ざ z a))
+;; D06 y: ら / ぱ / よ
+(defvirtualkeys (t! keys2 ら r a)  (t! keys2 ぱ p a)  (t! keys2 よ y o))
+(defalias       (t! send2 ら r a)  (t! send2 ぱ p a)  (t! send2 よ y o))
+;; D07 u: ち / ぢ / に
+(defvirtualkeys (t! keys2 ち t i)  (t! keys2 ぢ d i)  (t! keys2 に n i))
+(defalias       (t! send2 ち t i)  (t! send2 ぢ d i)  (t! send2 に n i))
+;; D08 i: く / ぐ / る
+(defvirtualkeys (t! keys2 く k u)  (t! keys2 ぐ g u)  (t! keys2 る r u))
+(defalias       (t! send2 く k u)  (t! send2 ぐ g u)  (t! send2 る r u))
+;; D09 o: つ / づ / ま
+(defvirtualkeys (t! keys2 つ t u)  (t! keys2 づ d u)  (t! keys2 ま m a))
+(defalias       (t! send2 つ t u)  (t! send2 づ d u)  (t! send2 ま m a))
+;; D10 p: ， / ぴ / ぇ
+(defvirtualkeys (t! keys1 ， comm)  (t! keys2 ぴ p i)  (t! keys2 ぇ x e))
+(defalias       (t! send1 ， comm)  (t! send2 ぴ p i)  (t! send2 ぇ x e))
+;; D11 [: 、 / 未定義 / 未定義
+(defvirtualkeys (t! keys1 、 comm))
+(defalias       (t! send1 、 comm))
+;; D12 ]: ゛ / 未定義 / ゜（゛ ゜ は送出できないため、キーそのものを出力する）
+;; C01 a: う / を / 未定義
+(defvirtualkeys (t! keys1 う u)  (t! keys2 を w o))
+(defalias       (t! send1 う u)  (t! send2 を w o))
+;; C02 s: し / あ / じ
+(defvirtualkeys (t! keys2 し s i)  (t! keys1 あ a)  (t! keys2 じ z i))
+(defalias       (t! send2 し s i)  (t! send1 あ a)  (t! send2 じ z i))
+;; C03 d: て / な / で
+(defvirtualkeys (t! keys2 て t e)  (t! keys2 な n a)  (t! keys2 で d e))
+(defalias       (t! send2 て t e)  (t! send2 な n a)  (t! send2 で d e))
+;; C04 f: け / ゅ / げ
+(defvirtualkeys (t! keys2 け k e)  (t! keys3 ゅ x y u)  (t! keys2 げ g e))
+(defalias       (t! send2 け k e)  (t! send3 ゅ x y u)  (t! send2 げ g e))
+;; C05 g: せ / も / ぜ
+(defvirtualkeys (t! keys2 せ s e)  (t! keys2 も m o)  (t! keys2 ぜ z e))
+(defalias       (t! send2 せ s e)  (t! send2 も m o)  (t! send2 ぜ z e))
+;; C06 h: は / ば / み
+(defvirtualkeys (t! keys2 は h a)  (t! keys2 ば b a)  (t! keys2 み m i))
+(defalias       (t! send2 は h a)  (t! send2 ば b a)  (t! send2 み m i))
+;; C07 j: と / ど / お
+(defvirtualkeys (t! keys2 と t o)  (t! keys2 ど d o)  (t! keys1 お o))
+(defalias       (t! send2 と t o)  (t! send2 ど d o)  (t! send1 お o))
+;; C08 k: き / ぎ / の
+(defvirtualkeys (t! keys2 き k i)  (t! keys2 ぎ g i)  (t! keys2 の n o))
+(defalias       (t! send2 き k i)  (t! send2 ぎ g i)  (t! send2 の n o))
+;; C09 l: い / ぽ / ょ
+(defvirtualkeys (t! keys1 い i)  (t! keys2 ぽ p o)  (t! keys3 ょ x y o))
+(defalias       (t! send1 い i)  (t! send2 ぽ p o)  (t! send3 ょ x y o))
+;; C10 scln: ん / 未定義 / っ
+(defvirtualkeys (t! keys2 ん x n)  (t! keys3 っ x t u))
+(defalias       (t! send2 ん x n)  (t! send3 っ x t u))
+;; B01 z: ． / ぅ / 未定義
+(defvirtualkeys (t! keys1 ． .)  (t! keys2 ぅ x u))
+(defalias       (t! send1 ． .)  (t! send2 ぅ x u))
+;; B02 x: ひ / ー / び
+(defvirtualkeys (t! keys2 ひ h i)  (t! keys1 ー min)  (t! keys2 び b i))
+(defalias       (t! send2 ひ h i)  (t! send1 ー min)  (t! send2 び b i))
+;; B03 c: す / ろ / ず
+(defvirtualkeys (t! keys2 す s u)  (t! keys2 ろ r o)  (t! keys2 ず z u))
+(defalias       (t! send2 す s u)  (t! send2 ろ r o)  (t! send2 ず z u))
+;; B04 v: ふ / や / ぶ
+(defvirtualkeys (t! keys2 ふ h u)  (t! keys2 や y a)  (t! keys2 ぶ b u))
+(defalias       (t! send2 ふ h u)  (t! send2 や y a)  (t! send2 ぶ b u))
+;; B05 b: へ / ぃ / べ
+(defvirtualkeys (t! keys2 へ h e)  (t! keys2 ぃ x i)  (t! keys2 べ b e))
+(defalias       (t! send2 へ h e)  (t! send2 ぃ x i)  (t! send2 べ b e))
+;; B06 n: め / ぷ / ぬ
+(defvirtualkeys (t! keys2 め m e)  (t! keys2 ぷ p u)  (t! keys2 ぬ n u))
+(defalias       (t! send2 め m e)  (t! send2 ぷ p u)  (t! send2 ぬ n u))
+;; B07 m: そ / ぞ / ゆ
+(defvirtualkeys (t! keys2 そ s o)  (t! keys2 ぞ z o)  (t! keys2 ゆ y u))
+(defalias       (t! send2 そ s o)  (t! send2 ぞ z o)  (t! send2 ゆ y u))
+;; B08 comm: ね / ぺ / む
+(defvirtualkeys (t! keys2 ね n e)  (t! keys2 ぺ p e)  (t! keys2 む m u))
+(defalias       (t! send2 ね n e)  (t! send2 ぺ p e)  (t! send2 む m u))
+;; B09 .: ほ / ぼ / わ
+(defvirtualkeys (t! keys2 ほ h o)  (t! keys2 ぼ b o)  (t! keys2 わ w a))
+(defalias       (t! send2 ほ h o)  (t! send2 ぼ b o)  (t! send2 わ w a))
+;; B10 /: ・ / ゛ / ぉ（゛ は送出できないため、キーそのものを出力する）
+(defvirtualkeys (t! keys1 ・ /)  (t! keys2 ぉ x o))
+(defalias       (t! send1 ・ /)  (t! send2 ぉ x o))

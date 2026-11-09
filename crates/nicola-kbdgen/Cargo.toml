@@ -1,0 +1,17 @@
+[package]
+name = "nicola-kbdgen"
+description = "Generate the kanata configuration (.kbd) from the NICOLA layout definition"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+nicola-layout.workspace = true
+
+[dev-dependencies]
+nicola-testcases.workspace = true
+# Loads Kanata as a library and runs the generated .kbd in simulation.
+# Pinned to the same version as the patched kanata used on the real machine (platform/linux/kanata).
+kanata = { version = "=1.11.0", default-features = false, features = ["simulated_output"] }

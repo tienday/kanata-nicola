@@ -1,0 +1,50 @@
+From: kanata-nicola
+Date: Sun, 1 Nov 2026 12:08:23 +0900
+Subject: [PATCH] tcp server: take ChangeLayer and the requests only
+
+The TCP server has no authentication: any process on the machine can connect,
+including those of other users and sandboxed applications that share the host
+network. Besides switching the layer, it could make kanata load a
+configuration file of its choice (ReloadFile, and Reload*), act on virtual keys
+(ActOnFakeKey) or move the mouse (SetMouse). A configuration that kanata loads
+this way decides what every key does, and can also report keys to the
+connected clients.
+
+kanata-nicola uses the port for IME sync, which sends ChangeLayer only. Take
+ChangeLayer and the requests that change nothing (Hello, Request*); answer any
+other command with an error and disconnect the client, as for an invalid
+message.
+---
+--- a/src/tcp_server.rs
++++ b/src/tcp_server.rs
+@@ -190,6 +190,30 @@
+                                 match v {
+                                     Ok(event) => {
+                                         log::debug!("tcp server received command: {:?}", event);
++                                        // Only ChangeLayer and the requests that change nothing. Any local
++                                        // process can connect (there is no authentication), and the other
++                                        // commands would let it load another configuration, act on virtual
++                                        // keys or move the mouse.
++                                        if !matches!(
++                                            event,
++                                            ClientMessage::ChangeLayer { .. }
++                                                | ClientMessage::RequestLayerNames {}
++                                                | ClientMessage::RequestFakeKeyNames {}
++                                                | ClientMessage::RequestCurrentLayerInfo {}
++                                                | ClientMessage::RequestCurrentLayerName {}
++                                                | ClientMessage::Hello {}
++                                        ) {
++                                            log::warn!(
++                                                "client sent a command that this build does not take, disconnecting them: {event:?}"
++                                            );
++                                            let response = ServerResponse::Error {
++                                                msg: "command not taken: this build takes ChangeLayer and requests only"
++                                                    .to_string(),
++                                            };
++                                            let _ = stream.write_all(&response.as_bytes());
++                                            connections.lock().remove(&addr);
++                                            break;
++                                        }
+                                         match event {
+                                             ClientMessage::ChangeLayer { new } => {
+                                                 kanata.lock().change_layer(new);

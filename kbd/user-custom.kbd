@@ -1,0 +1,18 @@
+;; kanata-nicola — 環境固有設定（user-custom.kbd）
+;; SPDX-License-Identifier: MIT OR Apache-2.0
+;;
+;; 配列プロファイル（nicola.kbd 等）が include で読み込む。配列プロファイルを更新した場合も、このファイルはそのまま使用できる。
+;; 項目と記述方法は docs/kanata-kbd.md。
+
+(defcfg
+  ;; 変更しない（defsrc に無いキー〔Enter 等〕も kanata で処理し、文字の送出より先に出力されないようにするため）。
+  process-unmapped-keys yes
+  ;; レイヤの切り替えをログに出力しない（親指キーを押すたびに出力されるため）。
+  log-layer-changes no
+)
+
+(defvar
+  ;; 左右の Ctrl に加えて、Ctrl として扱うキー（デスクトップのキー配列の設定〔xkb〕で Ctrl に変更したキー）。
+  ;; 例: CapsLock の場合は (or (input real caps))。指定しない場合は (or)。
+  keys-as-ctrl (or)
+)

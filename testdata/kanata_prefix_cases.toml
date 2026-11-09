@@ -1,0 +1,132 @@
+# 親指先行方式（設計書 ADR-18）の期待動作。
+#
+# 文字キーを押した瞬間に親指が押されていればシフト面、押されていなければ単独面を、押した瞬間に出す。
+# 文字を先に押した同時打鍵は成立しない。親指を押している間の文字キーは、すべてシフト面（連続シフト。NICOLA 規格には無い拡張）。
+# 親指単独（変換・無変換）は、押している間に文字キーを押さなかった場合だけ、離したときに出す（離すときに修飾キーを
+# 押していれば出さない）。
+# 親指キーを Shift キーと同じように使う方式。
+# 書式（読み込みは crates/nicola-testcases）:
+#   id                ケースの ID
+#   desc              説明
+#   input             入力。空白区切り、時刻は ms
+#                       d:<KEY>@t / u:<KEY>@t  キーの押下・離し。KEY は evdev 名から KEY_ を除いたもの。OL / OR は親指キー
+#                       end@t                  入力なしで時刻 t まで進める
+#   expect            期待する出力。空白区切り
+#                       か            文字
+#                       [OL] / [OR]   親指の単独打鍵（無変換・変換）
+#                       pass:d:ENTER  そのまま通したキー（d = 押下、u = 離し）
+#                     @t を付けると出力時刻も比べる（±3ms まで許す）
+
+[[case]]
+id = "TC-P01"
+desc = "文字キー単独。押した瞬間に出る（待ちが無い）"
+input = "d:W@0 u:W@60"
+expect = "か@0"
+
+[[case]]
+id = "TC-P02"
+desc = "親指先行の同時打鍵。親指単独は出ない"
+input = "d:OR@0 d:W@30 u:W@60 u:OR@100"
+expect = "が@30"
+
+[[case]]
+id = "TC-P03"
+desc = "左親指"
+input = "d:OL@0 d:S@30 u:S@60 u:OL@90"
+expect = "あ@30"
+
+[[case]]
+id = "TC-P04"
+desc = "文字先行は同時打鍵にならない（文字は単独面、親指は単独打鍵）"
+input = "d:W@0 d:OR@30 u:W@60 u:OR@100"
+expect = "か@0 [OR]@100"
+
+[[case]]
+id = "TC-P05"
+desc = "親指を押している間の文字はすべてシフト面（連続シフト）"
+input = "d:OR@0 d:W@30 u:W@60 d:E@100 u:E@130 d:R@170 u:R@200 u:OR@260"
+expect = "が だ ご"
+
+[[case]]
+id = "TC-P06"
+desc = "親指を長く押してから文字（時間の制限は無い）"
+input = "d:OR@0 d:W@300 u:W@330 u:OR@400"
+expect = "が@300"
+
+[[case]]
+id = "TC-P07"
+desc = "文字を押した瞬間に親指が押されていればシフト面（親指を離すのがその後でも）"
+input = "d:OR@0 d:W@30 u:W@60 d:E@100 u:OR@110 u:E@150"
+expect = "が だ"
+
+[[case]]
+id = "TC-P08"
+desc = "親指を離してから押した文字は単独面"
+input = "d:OR@0 d:W@30 u:W@60 u:OR@90 d:E@100 u:E@130"
+expect = "が た"
+
+[[case]]
+id = "TC-P09"
+desc = "「どきゅ」: 次の文字用に押した親指が、直前の文字に付かない"
+input = "d:OL@0 d:J@20 u:J@60 u:OL@80 d:K@100 d:OL@130 u:K@140 d:F@150 u:F@190 u:OL@200"
+expect = "ど き ゅ"
+
+[[case]]
+id = "TC-P10"
+desc = "親指の単独打鍵（短い）"
+input = "d:OR@0 u:OR@50"
+expect = "[OR]@50"
+
+[[case]]
+id = "TC-P11"
+desc = "親指の単独打鍵（長押し）。離したときに出る"
+input = "d:OR@0 u:OR@400"
+expect = "[OR]@400"
+
+[[case]]
+id = "TC-P12"
+desc = "左右の親指を両方押しているときは、後から押した親指の面"
+input = "d:OR@0 d:OL@50 d:W@80 u:W@100 u:OL@120 u:OR@140"
+expect = "え"
+
+[[case]]
+id = "TC-P13"
+desc = "Ctrl 押下中は素通し（ショートカット）"
+input = "d:LEFTCTRL@0 d:W@20 u:W@40 u:LEFTCTRL@60"
+expect = "pass:d:LEFTCTRL pass:d:W pass:u:W pass:u:LEFTCTRL"
+
+[[case]]
+id = "TC-P14"
+desc = "Ctrl＋親指は親指キーをそのまま送る（IME 切替。単独打鍵の判定をしない）"
+input = "d:LEFTCTRL@0 d:MUHENKAN@50 u:MUHENKAN@90 u:LEFTCTRL@91"
+expect = "pass:d:LEFTCTRL [OL] pass:u:LEFTCTRL"
+
+[[case]]
+id = "TC-P17"
+desc = "親指 → Shift → 親指を離す: 単独打鍵を出さない（後から押した Shift を無変換に掛けない。Shift＋無変換は IME の操作になりうる）"
+input = "d:OL@0 d:LEFTSHIFT@30 u:OL@60 u:LEFTSHIFT@90"
+expect = "pass:d:LEFTSHIFT pass:u:LEFTSHIFT"
+
+[[case]]
+id = "TC-P18"
+desc = "親指 → Ctrl → 親指を離す: 単独打鍵を出さない（右の親指でも同じ）"
+input = "d:OR@0 d:LEFTCTRL@30 u:OR@60 u:LEFTCTRL@90"
+expect = "pass:d:LEFTCTRL pass:u:LEFTCTRL"
+
+[[case]]
+id = "TC-P19"
+desc = "親指を押している間に Ctrl を押して離す: 親指を離すときは修飾キーが無いので、単独打鍵を出す"
+input = "d:OL@0 d:LEFTCTRL@30 u:LEFTCTRL@50 u:OL@80"
+expect = "pass:d:LEFTCTRL pass:u:LEFTCTRL [OL]@80"
+
+[[case]]
+id = "TC-P15"
+desc = "文字の後の Enter は文字の後に出る"
+input = "d:T@0 d:ENTER@10 u:T@20 u:ENTER@30"
+expect = "さ pass:d:ENTER pass:u:ENTER"
+
+[[case]]
+id = "TC-P16"
+desc = "ロール打鍵（同じ母音）"
+input = "d:W@0 d:T@20 u:W@40 u:T@60"
+expect = "か さ"

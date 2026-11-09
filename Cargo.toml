@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+# kanata sources that platform/linux/kanata/build.sh unpacks under target/ (built as a separate package)
+exclude = ["target"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+# kanata (the patched build and the dev-dependency for the simulation tests) needs 1.85.
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+nicola-layout = { path = "crates/nicola-layout" }
+nicola-testcases = { path = "crates/nicola-testcases" }
+nicola-kbdgen = { path = "crates/nicola-kbdgen" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
