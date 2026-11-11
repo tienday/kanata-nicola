@@ -6,7 +6,7 @@ use kanata_state_machine::{str_to_oscode, Kanata};
 use nicola_kbdgen::kanata_key;
 use nicola_testcases::{parse_input, Action, Step};
 
-/// A layout overlay that puts symbols on character keys (D11 solo → and right 『, D12 right ←, D01 right …), to
+/// A layout overlay that puts symbols on character keys (D11 solo → and rthumb 『, D12 rthumb ←, D01 rthumb …), to
 /// apply after practical and lag-tolerant: the tests cover symbol faces where the standard layout has none.
 pub const SYMBOLS_OVERLAY: &str = r#"
 [meta]
@@ -14,13 +14,13 @@ name = "symbols"
 
 [keys.KEY_LEFTBRACE]
 solo = "→"
-right = "『"
+rthumb = "『"
 
 [keys.KEY_RIGHTBRACE]
-right = "←"
+rthumb = "←"
 
 [keys.KEY_Q]
-right = "…"
+rthumb = "…"
 "#;
 
 /// kanata's parser and state are shared within the process, so parallel tests must not run it at the same time

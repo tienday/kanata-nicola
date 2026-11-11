@@ -21,7 +21,7 @@ usage: nicola-kbdgen [options] > nicola.kbd
 options:
   --layout <file>          layout definition (default: the bundled NICOLA J type)
   --overlay <file>         apply a layout overlay file (repeatable; applied in the order given)
-  --thumbs <L> <R>         evdev names of the thumb keys (default {left} {right})
+  --thumbs <L>:<R>         evdev names of the thumb keys (default {left}:{right})
   --toggle <KEY|none>      NICOLA ON/OFF toggle key (default {toggle}; the Hankaku/Zenkaku key is KEY_GRAVE)
   --key-as-ctrl <KEY>      key to treat as Ctrl besides left and right Ctrl (repeatable;
                            e.g. KEY_CAPSLOCK with xkb ctrl:nocaps)
@@ -36,6 +36,16 @@ options:
   --force                  with --split, overwrite an existing {ENV_FILE}
 "
     )
+}
+
+/// The value of `--thumbs`: the left and the right thumb keys, written as in `NICOLA_THUMB_KEYS` of config.env.
+fn thumb_keys(v: &str) -> Result<(String, String), String> {
+    match v.split_once(':') {
+        Some((l, r)) if !l.is_empty() && !r.is_empty() && !r.contains(':') => Ok((l.to_string(), r.to_string())),
+        _ => Err(format!(
+            "--thumbs must be the left and the right thumb keys, separated by \":\" (e.g. KEY_SPACE:KEY_HENKAN): {v}"
+        )),
+    }
 }
 
 fn main() -> ExitCode {
@@ -63,10 +73,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         match a.as_str() {
             "--layout" => layout_src = std::fs::read_to_string(value(&mut args, &a)?)?,
             "--overlay" => overlays.push(value(&mut args, &a)?),
-            "--thumbs" => {
-                opt.thumb_left = value(&mut args, &a)?;
-                opt.thumb_right = value(&mut args, &a)?;
-            }
+            "--thumbs" => (opt.thumb_left, opt.thumb_right) = thumb_keys(&value(&mut args, &a)?)?,
             "--toggle" => {
                 let k = value(&mut args, &a)?;
                 opt.toggle_key = (k != "none").then_some(k);

@@ -323,7 +323,7 @@ impl<'a> Generator<'a> {
         for (_, k) in &keys {
             // A key that an overlay added without a position is named alone.
             let at = if k.pos.is_empty() { String::new() } else { format!(" ({})", k.pos) };
-            for (face, sym) in ["solo", "left", "right"].into_iter().zip(faces(k)) {
+            for (face, sym) in ["solo", "lthumb", "rthumb"].into_iter().zip(faces(k)) {
                 if let Some(sym) = sym {
                     encoder::check(opt.encoder, sym)
                         .map_err(|why| Error(format!("{}{at} {face} = {sym:?}: {why}", k.name)))?;
@@ -508,7 +508,7 @@ impl<'a> Generator<'a> {
         let raw_thumb_face = self
             .keys
             .iter()
-            .any(|(_, k)| [&k.faces.left, &k.faces.right].into_iter().any(|f| self.resolve(k, f).is_none()));
+            .any(|(_, k)| [&k.faces.lthumb, &k.faces.rthumb].into_iter().any(|f| self.resolve(k, f).is_none()));
         let (raw_note, raw_template) = if raw_thumb_face {
             (
                 ";;   shifted-raw  送出できる文字の無い親指の面。キーをそのまま出力し、親指の単独打鍵を取り消す\n",
@@ -526,8 +526,8 @@ impl<'a> Generator<'a> {
         let layers = [
             first,
             second,
-            self.thumb_layer("l", "左", l, |k| &k.faces.left),
-            self.thumb_layer("r", "右", r, |k| &k.faces.right),
+            self.thumb_layer("l", "左", l, |k| &k.faces.lthumb),
+            self.thumb_layer("r", "右", r, |k| &k.faces.rthumb),
         ]
         .join("\n");
         format!(
@@ -915,5 +915,5 @@ fn name(sym: &str) -> String {
 
 /// The three faces of a key: solo, left thumb, right thumb.
 fn faces(k: &KeyDef) -> [Option<&str>; 3] {
-    [k.faces.solo.as_deref(), k.faces.left.as_deref(), k.faces.right.as_deref()]
+    [k.faces.solo.as_deref(), k.faces.lthumb.as_deref(), k.faces.rthumb.as_deref()]
 }

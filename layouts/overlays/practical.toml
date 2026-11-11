@@ -12,10 +12,10 @@ name = "practical"
 solo = "っ"
 
 [keys.KEY_SEMICOLON]   # C10: 右親指 っ → 未定義
-right = ""
+rthumb = ""
 
 [keys.KEY_X]           # B02: 左親指 ー → ね
-left = "ね"
+lthumb = "ね"
 
 [keys.KEY_P]           # D10: 単独 ， → 、
 solo = "、"
@@ -24,10 +24,10 @@ solo = "、"
 
 [keys.KEY_RIGHTBRACE]  # D12（JIS の「[」キー）: 単独 ゛・右親指 ゜ → 未定義
 solo = ""
-right = ""
+rthumb = ""
 
 [keys.KEY_SLASH]       # B10: 左親指 ゛ → 未定義
-left = ""
+lthumb = ""
 
 [keys.KEY_Q]           # D01: 右親指 ゜ → 未定義
-right = ""
+rthumb = ""

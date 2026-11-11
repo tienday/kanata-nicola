@@ -5,293 +5,249 @@
 
 [meta]
 name = "NICOLA J型"
-variant = "J"
 source = "NICOLA配列規格書 2000-01-08 + 2018-11正誤、数字段は JIS 提案の J型図＋〜『』の追加"
 
 # ---- E段（数字段） ----
 [keys.KEY_1]           # E01
 pos = "E01"
-region = "left"
-left = "？"
-right = "？"
+lthumb = "？"
+rthumb = "？"
 
 [keys.KEY_2]           # E02
 pos = "E02"
-region = "left"
-left = "／"
-right = "／"
+lthumb = "／"
+rthumb = "／"
 
 [keys.KEY_3]           # E03（J型図に無い追加）
 pos = "E03"
-region = "left"
-left = "〜"
-right = "〜"
+lthumb = "〜"
+rthumb = "〜"
 
 [keys.KEY_4]           # E04
 pos = "E04"
-region = "left"
-left = "「"
-right = "「"
+lthumb = "「"
+rthumb = "「"
 
 [keys.KEY_5]           # E05
 pos = "E05"
-region = "left"
-left = "」"
-right = "」"
+lthumb = "」"
+rthumb = "」"
 
 [keys.KEY_6]           # E06（J型図の ［ の代わり）
 pos = "E06"
-region = "right"
-left = "｛"
-right = "｛"
+lthumb = "｛"
+rthumb = "｛"
 
 [keys.KEY_7]           # E07（J型図の ］ の代わり）
 pos = "E07"
-region = "right"
-left = "｝"
-right = "｝"
+lthumb = "｝"
+rthumb = "｝"
 
 [keys.KEY_8]           # E08
 pos = "E08"
-region = "right"
-left = "（"
-right = "（"
+lthumb = "（"
+rthumb = "（"
 
 [keys.KEY_9]           # E09
 pos = "E09"
-region = "right"
-left = "）"
-right = "）"
+lthumb = "）"
+rthumb = "）"
 
 [keys.KEY_0]           # E10（J型図に無い追加）
 pos = "E10"
-region = "right"
-left = "『"
-right = "『"
+lthumb = "『"
+rthumb = "『"
 
 [keys.KEY_MINUS]       # E11（J型図に無い追加）
 pos = "E11"
-region = "right"
-left = "』"
-right = "』"
+lthumb = "』"
+rthumb = "』"
 
 # ---- D段（上段） ----
 [keys.KEY_Q]           # D01
 pos = "D01"
-region = "left"
 solo = "。"
-left = "ぁ"
-right = "゜"
+lthumb = "ぁ"
+rthumb = "゜"
 
 [keys.KEY_W]           # D02
 pos = "D02"
-region = "left"
 solo = "か"
-left = "え"
-right = "が"
+lthumb = "え"
+rthumb = "が"
 
 [keys.KEY_E]           # D03
 pos = "D03"
-region = "left"
 solo = "た"
-left = "り"
-right = "だ"
+lthumb = "り"
+rthumb = "だ"
 
 [keys.KEY_R]           # D04
 pos = "D04"
-region = "left"
 solo = "こ"
-left = "ゃ"
-right = "ご"
+lthumb = "ゃ"
+rthumb = "ご"
 
 [keys.KEY_T]           # D05
 pos = "D05"
-region = "left"
 solo = "さ"
-left = "れ"
-right = "ざ"
+lthumb = "れ"
+rthumb = "ざ"
 
 [keys.KEY_Y]           # D06
 pos = "D06"
-region = "right"
 solo = "ら"
-left = "ぱ"
-right = "よ"
+lthumb = "ぱ"
+rthumb = "よ"
 
 [keys.KEY_U]           # D07
 pos = "D07"
-region = "right"
 solo = "ち"
-left = "ぢ"
-right = "に"
+lthumb = "ぢ"
+rthumb = "に"
 
 [keys.KEY_I]           # D08
 pos = "D08"
-region = "right"
 solo = "く"
-left = "ぐ"
-right = "る"
+lthumb = "ぐ"
+rthumb = "る"
 
 [keys.KEY_O]           # D09
 pos = "D09"
-region = "right"
 solo = "つ"
-left = "づ"
-right = "ま"
+lthumb = "づ"
+rthumb = "ま"
 
 [keys.KEY_P]           # D10
 pos = "D10"
-region = "right"
 solo = "，"
-left = "ぴ"
-right = "ぇ"
+lthumb = "ぴ"
+rthumb = "ぇ"
 
 [keys.KEY_LEFTBRACE]   # D11（JIS の「@」キー）
 pos = "D11"
-region = "right"
 solo = "、"
 
 [keys.KEY_RIGHTBRACE]  # D12（JIS の「[」キー）
 pos = "D12"
-region = "right"
 solo = "゛"
-right = "゜"
+rthumb = "゜"
 
 # ---- C段（中段） ----
 [keys.KEY_A]           # C01
 pos = "C01"
-region = "left"
 solo = "う"
-left = "を"
+lthumb = "を"
 
 [keys.KEY_S]           # C02
 pos = "C02"
-region = "left"
 solo = "し"
-left = "あ"
-right = "じ"
+lthumb = "あ"
+rthumb = "じ"
 
 [keys.KEY_D]           # C03
 pos = "C03"
-region = "left"
 solo = "て"
-left = "な"
-right = "で"
+lthumb = "な"
+rthumb = "で"
 
 [keys.KEY_F]           # C04
 pos = "C04"
-region = "left"
 solo = "け"
-left = "ゅ"
-right = "げ"
+lthumb = "ゅ"
+rthumb = "げ"
 
 [keys.KEY_G]           # C05
 pos = "C05"
-region = "left"
 solo = "せ"
-left = "も"
-right = "ぜ"
+lthumb = "も"
+rthumb = "ぜ"
 
 [keys.KEY_H]           # C06
 pos = "C06"
-region = "right"
 solo = "は"
-left = "ば"
-right = "み"
+lthumb = "ば"
+rthumb = "み"
 
 [keys.KEY_J]           # C07
 pos = "C07"
-region = "right"
 solo = "と"
-left = "ど"
-right = "お"
+lthumb = "ど"
+rthumb = "お"
 
 [keys.KEY_K]           # C08
 pos = "C08"
-region = "right"
 solo = "き"
-left = "ぎ"
-right = "の"
+lthumb = "ぎ"
+rthumb = "の"
 
 [keys.KEY_L]           # C09
 pos = "C09"
-region = "right"
 solo = "い"
-left = "ぽ"
-right = "ょ"
+lthumb = "ぽ"
+rthumb = "ょ"
 
 [keys.KEY_SEMICOLON]   # C10
 pos = "C10"
-region = "right"
 solo = "ん"
-right = "っ"
+rthumb = "っ"
 
 # ---- B段（下段） ----
 [keys.KEY_Z]           # B01
 pos = "B01"
-region = "left"
 solo = "．"
-left = "ぅ"
+lthumb = "ぅ"
 
 [keys.KEY_X]           # B02
 pos = "B02"
-region = "left"
 solo = "ひ"
-left = "ー"
-right = "び"
+lthumb = "ー"
+rthumb = "び"
 
 [keys.KEY_C]           # B03
 pos = "B03"
-region = "left"
 solo = "す"
-left = "ろ"
-right = "ず"
+lthumb = "ろ"
+rthumb = "ず"
 
 [keys.KEY_V]           # B04
 pos = "B04"
-region = "left"
 solo = "ふ"
-left = "や"
-right = "ぶ"
+lthumb = "や"
+rthumb = "ぶ"
 
 [keys.KEY_B]           # B05
 pos = "B05"
-region = "left"
 solo = "へ"
-left = "ぃ"
-right = "べ"
+lthumb = "ぃ"
+rthumb = "べ"
 
 [keys.KEY_N]           # B06
 pos = "B06"
-region = "right"
 solo = "め"
-left = "ぷ"
-right = "ぬ"
+lthumb = "ぷ"
+rthumb = "ぬ"
 
 [keys.KEY_M]           # B07
 pos = "B07"
-region = "right"
 solo = "そ"
-left = "ぞ"
-right = "ゆ"
+lthumb = "ぞ"
+rthumb = "ゆ"
 
 [keys.KEY_COMMA]       # B08
 pos = "B08"
-region = "right"
 solo = "ね"
-left = "ぺ"
-right = "む"
+lthumb = "ぺ"
+rthumb = "む"
 
 [keys.KEY_DOT]         # B09
 pos = "B09"
-region = "right"
 solo = "ほ"
-left = "ぼ"
-right = "わ"
+lthumb = "ぼ"
+rthumb = "わ"
 
 [keys.KEY_SLASH]       # B10
 pos = "B10"
-region = "right"
 solo = "・"
-left = "゛"
-right = "ぉ"
+lthumb = "゛"
+rthumb = "ぉ"

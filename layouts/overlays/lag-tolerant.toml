@@ -9,23 +9,23 @@ name = "lag-tolerant"
 # ---- シフト面を単独面と同じ文字にする ----
 
 [keys.KEY_C]           # B03: 右親指 ず → す
-right = "す"
+rthumb = "す"
 
 [keys.KEY_L]           # C09: 左親指 ぽ → い
-left = "い"
+lthumb = "い"
 
 # ---- 押し出された文字の移動先 ----
 
 [keys.KEY_Z]           # B01: 単独 ． → ぽ、右親指（未定義）→ ず
 solo = "ぽ"
-right = "ず"
+rthumb = "ず"
 
 # ---- 数字段の記号を未定義にする ----
 
 [keys.KEY_0]           # E10: 左親指・右親指 『 → 未定義
-left = ""
-right = ""
+lthumb = ""
+rthumb = ""
 
 [keys.KEY_MINUS]       # E11: 左親指・右親指 』 → 未定義
-left = ""
-right = ""
+lthumb = ""
+rthumb = ""

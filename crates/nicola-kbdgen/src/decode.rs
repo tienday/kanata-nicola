@@ -26,7 +26,7 @@ impl Decoder {
         let mut table = HashMap::new();
         for k in layout.active_keys() {
             // Romaji faces (ASCII) are keys to type, not characters.
-            for sym in [&k.faces.solo, &k.faces.left, &k.faces.right].into_iter().flatten() {
+            for sym in [&k.faces.solo, &k.faces.lthumb, &k.faces.rthumb].into_iter().flatten() {
                 if encoder::is_romaji(sym) {
                     continue;
                 }

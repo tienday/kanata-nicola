@@ -337,7 +337,7 @@ fn combos() -> Vec<Combo> {
     // Space as the left thumb key, with IME sync (the recommended way): its face and its solo keystroke; Ctrl+Space
     // goes to the desktop and Muhenkan is a plain key. NICOLA off, Space is Space.
     let mut c = Combo::new("space-thumb", "NICOLA_IME_SYNC=1\nNICOLA_THUMB_KEYS=KEY_SPACE:KEY_HENKAN\n")
-        .gen(&["--thumbs", "KEY_SPACE", "KEY_HENKAN", "--toggle", "none"])
+        .gen(&["--thumbs", "KEY_SPACE:KEY_HENKAN", "--toggle", "none"])
         .kbd(&[TOGGLE_IME_SYNC, ";; 親指キー: 左 = spc（Space）、右 = henk（変換）"]);
     c.kanata = vec!["--wait-device-ms", "0", "-p", "127.0.0.1:23800"];
     c.ime_sync = true;
@@ -512,9 +512,6 @@ fn wrong_values_stop_with_the_name_of_the_setting() {
         ("NICOLA_IME_SYNC=1\nif then", "syntax error"),
         // A variable that is not set (XDG_CONFIG_HOME often is not): the scripts run with set -u.
         ("NICOLA_EXTRA_KBD=\"$UNSET_IN_TEST/user-extra.kbd\"", "UNSET_IN_TEST: unbound variable"),
-        ("NICOLA_THUMB_KEYS=KEY_SPACE", "NICOLA_THUMB_KEYS"),
-        ("NICOLA_THUMB_KEYS=KEY_SPACE:KEY_HENKAN:KEY_MUHENKAN", "NICOLA_THUMB_KEYS"),
-        ("NICOLA_THUMB_KEYS=:KEY_HENKAN", "NICOLA_THUMB_KEYS"),
     ];
     for (i, (config_env, message)) in cases.iter().enumerate() {
         let dir = case_dir(&format!("wrong-{i}"));
@@ -534,6 +531,10 @@ fn wrong_values_stop_with_the_name_of_the_setting() {
         ("NICOLA_KEYS_AS_CTRL=KEY_CAPSLOCK\nNICOLA_LAYOUT_OVERLAYS=caps.toml", "--key-as-ctrl"),
         // kanata would ignore an include that does not exist.
         ("NICOLA_EXTRA_KBD=nope.kbd", "nope.kbd: No such file"),
+        // left:right, as --thumbs takes it.
+        ("NICOLA_THUMB_KEYS=KEY_SPACE", "--thumbs must be the left and the right thumb keys"),
+        ("NICOLA_THUMB_KEYS=KEY_SPACE:KEY_HENKAN:KEY_MUHENKAN", "--thumbs must be"),
+        ("NICOLA_THUMB_KEYS=:KEY_HENKAN", "--thumbs must be"),
         ("NICOLA_THUMB_KEYS=KEY_SPACE:KEY_NOPE", "no kanata name for KEY_NOPE"),
         // While a modifier is held, the character keys pass through; the toggle key cannot be a thumb key too.
         ("NICOLA_THUMB_KEYS=KEY_LEFTALT:KEY_HENKAN", "cannot be the left thumb key (--thumbs)"),

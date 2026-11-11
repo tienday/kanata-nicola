@@ -58,11 +58,6 @@ nicola_check_number() {
 # Checks the values that the scripts use directly, so that a mistake names the setting.
 nicola_check_values() {
   [[ "${NICOLA_IME_SYNC:-0}" == [01] ]] || { echo "NICOLA_IME_SYNC must be 0 or 1: $NICOLA_IME_SYNC" >&2; return 1; }
-  # Two names, left:right (the generator checks the names themselves).
-  if [[ -n "${NICOLA_THUMB_KEYS:-}" && ! "$NICOLA_THUMB_KEYS" =~ ^[^:]+:[^:]+$ ]]; then
-    echo "NICOLA_THUMB_KEYS must be the left and the right thumb keys, separated by \":\" (e.g. KEY_SPACE:KEY_HENKAN): $NICOLA_THUMB_KEYS" >&2
-    return 1
-  fi
   nicola_check_number NICOLA_WAIT_DEVICE_MS 0 0 99999 "a number of milliseconds" || return 1
   nicola_check_number NICOLA_KANATA_PORT "$nicola_default_port" 1 65535 "a port number" || return 1
 }
@@ -108,8 +103,9 @@ nicola_config() {
     gen_args+=(--extra-kbd "$extra")
   fi
   nicola_add_each --key-as-ctrl "${NICOLA_KEYS_AS_CTRL:-}"
+  # left:right, as the generator takes it (and checks it).
   if [[ -n "${NICOLA_THUMB_KEYS:-}" ]]; then
-    gen_args+=(--thumbs "${NICOLA_THUMB_KEYS%%:*}" "${NICOLA_THUMB_KEYS#*:}") # checked above
+    gen_args+=(--thumbs "$NICOLA_THUMB_KEYS")
   fi
 
   port=$((10#${NICOLA_KANATA_PORT:-$nicola_default_port})) # checked above; read as decimal (09999 -> 9999)

@@ -51,7 +51,7 @@ cargo run --release -p nicola-kbdgen -- [options] [-o <file>]
 |---|---|---|
 | `--layout <file>` | 配列定義ファイル（[§3](#3-配列定義ファイル)） | 同梱の NICOLA J型 |
 | `--overlay <file>` | 重ねる配列差分ファイル（複数可。指定した順に重ねる） | なし |
-| `--thumbs <L> <R>` | 左右の親指キーのキーコード名（修飾キーは不可） | `KEY_MUHENKAN KEY_HENKAN` |
+| `--thumbs <L>:<R>` | 左右の親指キーのキーコード名（修飾キーは不可） | `KEY_MUHENKAN:KEY_HENKAN` |
 | `--toggle <KEY\|none>` | NICOLA 切替キー（キー本来の出力も送出する）。`none` は NICOLA 切替キーを置かない（IME 同期で使用する） | `KEY_GRAVE`（半角/全角） |
 | `--key-as-ctrl <KEY>` | 左右の Ctrl のほかに、Ctrl として扱うキー（複数可） | なし |
 | `--include-device <name>` | 対象にするキーボードの名前（複数可。調べ方は[設定リファレンス §3.1](settings.md#31-設定値の調べ方)） | すべてのキーボード |
@@ -102,26 +102,23 @@ cargo run --release -p nicola-kbdgen -- --overlay layouts/overlays/practical.tom
 ```toml
 [meta]
 name = "NICOLA J型"
-variant = "J"
 source = "NICOLA配列規格書 2000-01-08 + 2018-11正誤、数字段は JIS 提案の J型図＋〜『』の追加"
 
 [keys.KEY_Q]           # D01
 pos = "D01"
-region = "left"
 solo = "。"
-left = "ぁ"
-right = "゜"
+lthumb = "ぁ"
+rthumb = "゜"
 ```
 
 | 項目 | 内容 |
 |---|---|
-| `[meta]` `name`・`variant`・`source` | 名前、型（J/F/A）、出典。名前と出典は、生成する設定ファイルの冒頭に記述される |
+| `[meta]` `name`・`source` | 名前と出典。生成する設定ファイルの冒頭に記述される |
 | `[keys.<キーコード名>]` | 1 つのキー（JIS 106/109 キーボードのキー） |
 | `pos` | JIS の位置記号（E01〜E13、D01〜D12、C01〜C13、B01〜B11）。キーは、この順に並べて扱う |
-| `region` | `left` / `right`（左右どちらの手のキーか）。記述は必須だが、kanata 設定生成器は使用しない |
-| `solo`・`left`・`right` | 単独面・左親指の面・右親指の面。規格で定義されていない面は記述しない |
+| `solo`・`lthumb`・`rthumb` | 単独面・左親指の面・右親指の面。規格で定義されていない面は記述しない |
 
-配列差分ファイルの書式と規則は[配列差分ファイル §2](layout-overlays.md#2-書式)にある。読み込みは、配列定義ファイルと同じ `crates/nicola-layout` で行う。
+配列差分ファイル（[配列差分ファイル §2](layout-overlays.md#2-書式)）は、配列定義ファイルと同じ項目のうち、変更する面だけを記述する（`[meta]` と `pos` は任意）。読み込みは、配列定義ファイルと同じ `crates/nicola-layout` で行う。誤りとして扱うもの（[配列差分ファイル §1](layout-overlays.md#1-仕組みと利用方法) の「誤りがある場合」）も、配列定義ファイルと同じである。
 
 ## 4. IME 同期（nicola-imesync）
 
@@ -269,7 +266,7 @@ flowchart TB
 | `NICOLA_KANATA_BIN` | | 起動する kanata の実行ファイル |
 | `NICOLA_WAIT_DEVICE_MS` | | `--wait-device-ms <ms>`。省略した場合は、`NICOLA_KANATA_BIN` の指定が無いときは `--wait-device-ms 0`、指定があるときは付けない（kanata の既定の 200ms） |
 
-表に無い設定は、対応する kanata 設定生成器のオプション（[§2.1](#21-実行方法とオプション)）に変換する（`NICOLA_THUMB_KEYS` は `:` で分けて `--thumbs <左> <右>`。値が複数ある設定は 1 つずつ。相対パスは設定の置き場所を起点にし、配列差分ファイルの名前は同梱のファイルのパスにする）。
+表に無い設定は、対応する kanata 設定生成器のオプション（[§2.1](#21-実行方法とオプション)）に変換する（左右の組の `NICOLA_THUMB_KEYS` を除き、値が複数ある設定は 1 つずつ。相対パスは設定の置き場所を起点にし、配列差分ファイルの名前は同梱のファイルのパスにする）。
 
 ### 5.5 そのほかのスクリプト
 

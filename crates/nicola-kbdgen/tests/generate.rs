@@ -18,7 +18,7 @@ const LAG_TOLERANT: &str = include_str!("../../../layouts/overlays/lag-tolerant.
 fn symbols() -> Vec<String> {
     let layout = LayoutDef::parse(NICOLA_J).unwrap();
     let mut v: Vec<String> =
-        layout.keys.iter().flat_map(|k| [&k.faces.solo, &k.faces.left, &k.faces.right]).flatten().cloned().collect();
+        layout.keys.iter().flat_map(|k| [&k.faces.solo, &k.faces.lthumb, &k.faces.rthumb]).flatten().cloned().collect();
     v.sort();
     v.dedup();
     v
@@ -72,7 +72,7 @@ fn generated_configs_parse_in_kanata() {
 #[test]
 fn romaji_parentheses_share_the_definitions_of_the_full_width_ones() {
     let mut layout = LayoutDef::parse(NICOLA_J).unwrap();
-    layout.apply_overlay("[keys.KEY_Q]\nright = \"(\"\n[keys.KEY_P]\nright = \")\"").unwrap();
+    layout.apply_overlay("[keys.KEY_Q]\nrthumb = \"(\"\n[keys.KEY_P]\nrthumb = \")\"").unwrap();
     let cfg = generate(&layout, &Options::default()).unwrap();
     parses(&cfg, "romaji ( and ) with the number row's （ and ）");
     for (cell, definition) in
@@ -117,8 +117,11 @@ fn generator_rejects_faces_on_special_keys_and_bad_names() {
     assert!(err.contains("treated as Ctrl") && err.contains("--key-as-ctrl"), "{err}");
 
     // A face that cannot be sent as written: the message names the key and the face.
-    let err = gen("[keys.KEY_LEFTBRACE]\nright = \"［\"", &default).unwrap_err();
-    assert!(err.starts_with("KEY_LEFTBRACE (D11) right = \"［\": \"［\" (U+FF3B) is not in the romaji table"), "{err}");
+    let err = gen("[keys.KEY_LEFTBRACE]\nrthumb = \"［\"", &default).unwrap_err();
+    assert!(
+        err.starts_with("KEY_LEFTBRACE (D11) rthumb = \"［\": \"［\" (U+FF3B) is not in the romaji table"),
+        "{err}"
+    );
     let err = gen("[keys.KEY_Q]\nsolo = \"*z\"", &default).unwrap_err();
     assert!(err.starts_with("KEY_Q (D01) solo = \"*z\": ") && err.contains("must come last"), "{err}");
 
@@ -339,7 +342,7 @@ fn docs_list_the_generator_options() {
     let doc = fs::read_to_string(repo().join("docs/implementation.md")).unwrap();
     let section = doc.split("\n### 2.1 ").nth(1).expect("docs/implementation.md has §2.1");
     let section = section.split("\n### ").next().unwrap();
-    // "| `--thumbs <L> <R>` | … | `KEY_MUHENKAN KEY_HENKAN` |"; "| `-h`、`--help` | …"
+    // "| `--thumbs <L>:<R>` | … | `KEY_MUHENKAN:KEY_HENKAN` |"; "| `-h`、`--help` | …"
     let rows: Vec<Vec<&str>> =
         section.lines().filter(|l| l.starts_with("| `")).map(|l| l.trim_matches('|').split(" | ").collect()).collect();
     let options = |row: &[&str]| -> Vec<String> {
@@ -353,7 +356,7 @@ fn docs_list_the_generator_options() {
     let default = |option: &str| rows.iter().find(|r| options(r)[0] == option).map(|r| r[2].trim()).unwrap();
     let d = Options::default();
     let thumbs = default("--thumbs");
-    assert!(thumbs.contains(&format!("`{} {}`", d.thumb_left, d.thumb_right)), "--thumbs: {thumbs}");
+    assert!(thumbs.contains(&format!("`{}:{}`", d.thumb_left, d.thumb_right)), "--thumbs: {thumbs}");
     let toggle = default("--toggle");
     assert!(toggle.contains(&format!("`{}`", d.toggle_key.as_deref().unwrap())), "--toggle: {toggle}");
 }

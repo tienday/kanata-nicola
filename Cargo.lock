@@ -952,7 +952,7 @@ dependencies = [
 
 [[package]]
 name = "nicola-e2e"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "evdev",
  "nicola-kbdgen",
@@ -962,14 +962,14 @@ dependencies = [
 
 [[package]]
 name = "nicola-imesync"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "dbus",
 ]
 
 [[package]]
 name = "nicola-kbdgen"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "kanata",
  "nicola-layout",
@@ -978,7 +978,7 @@ dependencies = [
 
 [[package]]
 name = "nicola-layout"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
  "toml",
@@ -986,7 +986,7 @@ dependencies = [
 
 [[package]]
 name = "nicola-testcases"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
  "toml",

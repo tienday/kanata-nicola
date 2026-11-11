@@ -7,7 +7,7 @@ const LAG_TOLERANT: &str = include_str!("../../../layouts/overlays/lag-tolerant.
 
 fn faces(l: &LayoutDef, key: &str) -> [Option<String>; 3] {
     match l.keys.iter().find(|k| k.name == key) {
-        Some(k) => [k.faces.solo.clone(), k.faces.left.clone(), k.faces.right.clone()],
+        Some(k) => [k.faces.solo.clone(), k.faces.lthumb.clone(), k.faces.rthumb.clone()],
         None => [None, None, None],
     }
 }
@@ -110,7 +110,7 @@ fn docs_overlay_tables_give_the_faces() {
     }
     assert_eq!(positions(&rows), changed(&standard, &practical), "the keys that practical changes");
 
-    // Faces such as "ん / 未定義 / っ" (solo / left / right; "未定義" for none).
+    // Faces such as "ん / 未定義 / っ" (solo / lthumb / rthumb; "未定義" for none).
     let three = |cell: &str| -> [Option<String>; 3] {
         let v: Vec<Option<String>> = cell.split(" / ").map(|c| (c != "未定義").then(|| c.to_string())).collect();
         v.try_into().unwrap_or_else(|v| panic!("not three faces: {v:?}"))

@@ -160,7 +160,7 @@ kanata --check -c ~/.config/kanata-nicola/kbd/nicola.kbd
 kanata 設定生成器は、リポジトリの直下で実行する（Rust が必要。実行方法とオプションは[実装仕様書 §2.1](implementation.md#21-実行方法とオプション)）。例えば、親指キーを Space と変換に変更して、コピー先（[§2](#2-設定ファイルの編集)）に出力する場合は、次のコマンドを実行する。
 
 ```sh
-cargo run --release -p nicola-kbdgen -- --thumbs KEY_SPACE KEY_HENKAN --split -o ~/.config/kanata-nicola/kbd/nicola.kbd
+cargo run --release -p nicola-kbdgen -- --thumbs KEY_SPACE:KEY_HENKAN --split -o ~/.config/kanata-nicola/kbd/nicola.kbd
 ```
 
 kanata 設定生成器は、次のようにファイルを出力する。

@@ -21,36 +21,26 @@ pub enum Thumb {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Faces {
     pub solo: Option<String>,
-    pub left: Option<String>,
-    pub right: Option<String>,
+    pub lthumb: Option<String>,
+    pub rthumb: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Meta {
     pub name: String,
-    pub variant: String,
     #[serde(default)]
     pub source: String,
 }
 
+/// One key of a layout definition or an overlay file: its position and the faces written. `""` removes a face.
+/// Another field is an error: a misspelt face would otherwise change nothing without a word.
 #[derive(Debug, Deserialize)]
-struct RawKey {
-    pos: String,
-    #[allow(dead_code)]
-    region: String,
-    solo: Option<String>,
-    left: Option<String>,
-    right: Option<String>,
-}
-
-/// One key of an overlay file. Replaces only the faces written. `""` removes a face.
-#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct OverlayKey {
+struct RawKey {
     pos: Option<String>,
     solo: Option<String>,
-    left: Option<String>,
-    right: Option<String>,
+    lthumb: Option<String>,
+    rthumb: Option<String>,
 }
 
 /// An overlay file. A table other than `meta` and `keys` is an error: a misspelt `[key.KEY_W]` would otherwise
@@ -61,10 +51,12 @@ struct RawOverlay {
     #[serde(default)]
     meta: toml::Table,
     #[serde(default)]
-    keys: BTreeMap<String, OverlayKey>,
+    keys: BTreeMap<String, RawKey>,
 }
 
+/// A layout definition: the tables of an overlay file, with `[meta] name` and the `pos` of every key required.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawLayout {
     meta: Meta,
     keys: BTreeMap<String, RawKey>,
@@ -104,14 +96,12 @@ impl std::error::Error for Error {}
 impl LayoutDef {
     pub fn parse(src: &str) -> Result<Self, Error> {
         let raw: RawLayout = toml::from_str(src).map_err(|e| Error(e.to_string()))?;
-        let mut keys = Vec::new();
-        for (name, k) in raw.keys {
-            let code = keycodes::code_of(&name).ok_or_else(|| Error(format!("unknown key name: {name}")))?;
-            let faces = Faces { solo: k.solo, left: k.left, right: k.right };
-            keys.push(KeyDef { name, code, pos: k.pos, faces });
+        if let Some((name, _)) = raw.keys.iter().find(|(_, k)| k.pos.is_none()) {
+            return Err(Error(format!("{name}: pos is missing (every key of a layout definition needs its position)")));
         }
-        keys.sort_by_key(|k| pos_order(&k.pos));
-        Ok(Self { meta: raw.meta, keys, overlays: Vec::new() })
+        let mut layout = Self { meta: raw.meta, keys: Vec::new(), overlays: Vec::new() };
+        layout.merge(raw.keys)?;
+        Ok(layout)
     }
 
     /// Applies an overlay file (docs/layout-overlays.md).
@@ -122,8 +112,17 @@ impl LayoutDef {
     /// Keys not in the base layout can also be added. `pos` sets the position (also of an existing key).
     pub fn apply_overlay(&mut self, src: &str) -> Result<(), Error> {
         let raw: RawOverlay = toml::from_str(src).map_err(|e| Error(e.to_string()))?;
-        for (name, o) in raw.keys {
-            let code = keycodes::code_of(&name).ok_or_else(|| Error(format!("overlay: unknown key name: {name}")))?;
+        self.merge(raw.keys).map_err(|e| Error(format!("overlay: {e}")))?;
+        let name = raw.meta.get("name").and_then(|v| v.as_str()).unwrap_or("(unnamed)");
+        self.overlays.push(name.to_string());
+        Ok(())
+    }
+
+    /// Puts the keys of a file into the layout as `apply_overlay` describes (a layout definition goes into an empty
+    /// layout), and sorts the keys by position.
+    fn merge(&mut self, keys: BTreeMap<String, RawKey>) -> Result<(), Error> {
+        for (name, o) in keys {
+            let code = keycodes::code_of(&name).ok_or_else(|| Error(format!("unknown key name: {name}")))?;
             let idx = match self.keys.iter().position(|k| k.name == name) {
                 Some(i) => i,
                 None => {
@@ -146,18 +145,16 @@ impl LayoutDef {
                 }
             };
             set(&mut k.faces.solo, o.solo);
-            set(&mut k.faces.left, o.left);
-            set(&mut k.faces.right, o.right);
+            set(&mut k.faces.lthumb, o.lthumb);
+            set(&mut k.faces.rthumb, o.rthumb);
         }
         self.keys.sort_by_key(|k| pos_order(&k.pos));
-        let name = raw.meta.get("name").and_then(|v| v.as_str()).unwrap_or("(unnamed)");
-        self.overlays.push(name.to_string());
         Ok(())
     }
 
     /// Keys with at least one face (the keys that take part in decisions).
     pub fn active_keys(&self) -> impl Iterator<Item = &KeyDef> {
-        self.keys.iter().filter(|k| k.faces.solo.is_some() || k.faces.left.is_some() || k.faces.right.is_some())
+        self.keys.iter().filter(|k| k.faces.solo.is_some() || k.faces.lthumb.is_some() || k.faces.rthumb.is_some())
     }
 
     /// Looks up by character key (evdev name) and thumb (no thumb = solo).
@@ -166,8 +163,8 @@ impl LayoutDef {
         let k = self.active_keys().find(|k| k.name == name)?;
         let shifted = match thumb {
             None => None,
-            Some(Thumb::Left) => k.faces.left.as_deref(),
-            Some(Thumb::Right) => k.faces.right.as_deref(),
+            Some(Thumb::Left) => k.faces.lthumb.as_deref(),
+            Some(Thumb::Right) => k.faces.rthumb.as_deref(),
         };
         shifted.or(k.faces.solo.as_deref())
     }
@@ -216,10 +213,10 @@ mod tests {
             [meta]
             name = "test"
             [keys.KEY_SEMICOLON]
-            right = "ん"
+            rthumb = "ん"
             [keys.KEY_RIGHTBRACE]
             solo = ""
-            right = ""
+            rthumb = ""
             [keys.KEY_APOSTROPHE]
             pos = "C11"
             solo = "→"
@@ -250,5 +247,18 @@ mod tests {
         assert!(l.apply_overlay("[mata]\nname = \"x\"").is_err());
         // [meta] takes anything (description etc.).
         assert!(l.apply_overlay("[meta]\nname = \"x\"\ndescription = \"y\"").is_ok());
+    }
+
+    #[test]
+    fn layout_takes_the_overlay_fields_and_needs_name_and_pos() {
+        let key = "[keys.KEY_W]\npos = \"D02\"\nsolo = \"か\"\n";
+        let l = LayoutDef::parse(&format!("[meta]\nname = \"x\"\ndescription = \"y\"\n{key}")).unwrap();
+        assert_eq!(l.lookup("KEY_W", Some(Thumb::Left)).unwrap(), "か");
+        // A misspelt field or table, a key without its position, no name.
+        assert!(LayoutDef::parse(&format!("[meta]\nname = \"x\"\n{key}rigth = \"が\"\n")).is_err());
+        assert!(LayoutDef::parse(&format!("[meta]\nname = \"x\"\n{key}[key.KEY_E]\npos = \"D03\"\n")).is_err());
+        let e = LayoutDef::parse("[meta]\nname = \"x\"\n[keys.KEY_W]\nsolo = \"か\"\n").unwrap_err();
+        assert!(e.0.contains("KEY_W: pos is missing"), "{e}");
+        assert!(LayoutDef::parse(key).is_err());
     }
 }

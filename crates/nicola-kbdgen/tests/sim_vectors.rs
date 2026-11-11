@@ -313,7 +313,7 @@ fn romaji_faces_send_their_keys() {
         for k in &layout.keys {
             let key = k.name.trim_start_matches("KEY_");
             overlay += &format!("[keys.{}]\n", k.name);
-            for (face, thumb) in [("solo", None), ("left", Some("MUHENKAN")), ("right", Some("HENKAN"))] {
+            for (face, thumb) in [("solo", None), ("lthumb", Some("MUHENKAN")), ("rthumb", Some("HENKAN"))] {
                 let Some(romaji) = faces.next() else { break };
                 overlay += &format!("{face} = \"{}\"\n", romaji.replace('\\', "\\\\").replace('"', "\\\""));
                 match thumb {
@@ -380,8 +380,8 @@ fn number_row_thumb_faces() {
     );
     for k in rows {
         let key = k.name.trim_start_matches("KEY_");
-        let face = k.faces.left.as_deref().unwrap();
-        assert_eq!(k.faces.right.as_deref(), Some(face), "{}: the same character with either thumb", k.pos);
+        let face = k.faces.lthumb.as_deref().unwrap();
+        assert_eq!(k.faces.rthumb.as_deref(), Some(face), "{}: the same character with either thumb", k.pos);
         let want: Vec<String> = typed_keys(romaji(face).unwrap()).unwrap().into_iter().map(pressed_name).collect();
         for th in ["MUHENKAN", "HENKAN"] {
             let input = format!("d:{th}@0 d:{key}@20 u:{key}@50 u:{th}@80");
