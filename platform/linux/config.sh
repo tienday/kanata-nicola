@@ -158,6 +158,15 @@ nicola_check_caps_ctrl() {
   fi
 }
 
+# Prints "kanata-nicola <version>" for the programs in directory $1 (the installation), taken from its nicola-kbdgen
+# ("nicola-kbdgen <version>"). The version is "?" if it cannot be read.
+nicola_version() {
+  local version
+  version=$("$1/nicola-kbdgen" --version) || true
+  version=${version#nicola-kbdgen }
+  echo "kanata-nicola ${version:-?}"
+}
+
 # Our patched build carries three fixes for keyboard reconnects (platform/linux/kanata/README.md):
 # 0001 = upstream #2129, in releases from this version on; 0002 = rescan when udev sets a device
 # node's permissions, and 0003 = do not drop queued key events at a rescan (a bug of 0001), in no release yet.

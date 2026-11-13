@@ -49,6 +49,10 @@ if [[ -f "$nicola_config_dir/config.env" ]]; then
 else
   echo "settings: none ($nicola_config_dir/config.env does not exist), so the defaults"
 fi
+# Which version runs, for the log of the unit (journalctl, systemctl status). Not in check: install.sh shows it.
+if [[ "$mode" == kanata ]]; then
+  nicola_version .
+fi
 nicola_config || exit 78
 # The unit's own kanata has exited by now, so a kanata running is another one: most likely that of another user who
 # switched users without logging out. This one could not take the keyboards (kanata keeps running without them, or

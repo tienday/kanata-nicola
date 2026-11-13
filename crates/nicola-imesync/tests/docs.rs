@@ -1,5 +1,5 @@
 //! The options of nicola-imesync that docs/implementation.md §4 gives (the command line and the table, with the
-//! defaults) are those of its `--help`.
+//! defaults) are those of its `--help`; `--version` prints the version of the package, and `-h` the same as `--help`.
 
 use std::collections::BTreeMap;
 use std::process::Command;
@@ -11,16 +11,20 @@ fn help_options() -> BTreeMap<String, Option<String>> {
     let out = Command::new(env!("CARGO_BIN_EXE_nicola-imesync")).arg("--help").output().unwrap();
     let help = String::from_utf8(out.stdout).unwrap();
     let mut options = BTreeMap::new();
-    let mut current = None;
+    let mut current: Vec<&str> = vec![];
     for line in help.lines() {
-        // An option starts a line after two spaces; its description may go on in the next lines.
-        if let Some(option) = line.strip_prefix("  -").and_then(|l| l.split_whitespace().next()) {
-            current = Some(format!("-{option}"));
-            options.insert(format!("-{option}"), None);
+        // An option starts a line after two spaces, and its names end at the next two ("  -h, --help   …"); its
+        // description may go on in the next lines.
+        if let Some(names) = line.strip_prefix("  ").filter(|l| l.starts_with('-')) {
+            current = names.split("  ").next().unwrap().split(", ").map(|o| o.split(' ').next().unwrap()).collect();
+            for option in &current {
+                options.insert(option.to_string(), None);
+            }
         }
-        let default = line.split("(default ").nth(1).map(|d| d.split([')', ';']).next().unwrap().to_string());
-        if let (Some(option), Some(default)) = (&current, default) {
-            options.insert(option.clone(), Some(default));
+        if let Some(default) = line.split("(default ").nth(1).map(|d| d.split([')', ';']).next().unwrap()) {
+            for option in &current {
+                options.insert(option.to_string(), Some(default.to_string()));
+            }
         }
     }
     options
@@ -40,7 +44,9 @@ fn docs_list_the_imesync_options() {
         .map(|o| o.trim_end_matches([']', ' ']).split(' ').next().unwrap().to_string())
         .collect();
     in_line.sort();
-    assert_eq!(in_line, names(&help), "the command line of §4");
+    // Without -h and -V, which only print: the table has them.
+    let runs = |o: &String| !matches!(o.as_str(), "-h" | "--help" | "-V" | "--version");
+    assert_eq!(in_line, names(&help).into_iter().filter(runs).collect::<Vec<_>>(), "the command line of §4");
 
     // The table: "| `--port` | … | 23800 |", "| `--on-layer` / `--off-layer` | … | `nicola` / `base` |". Only the
     // rows of options: §4 has other tables.
@@ -49,10 +55,27 @@ fn docs_list_the_imesync_options() {
         let cells: Vec<&str> = row.trim_matches('|').split(" | ").map(str::trim).collect();
         let options: Vec<&str> = cells[0].split('`').skip(1).step_by(2).collect();
         let defaults: Vec<&str> = cells[2].split(" / ").map(|d| d.trim_matches('`')).collect();
-        for (i, option) in options.into_iter().filter(|o| !matches!(*o, "-h" | "--help")).enumerate() {
+        for (i, option) in options.into_iter().enumerate() {
             let default = defaults.get(i).filter(|d| **d != "—").map(|d| d.to_string());
             table.insert(option.to_string(), default);
         }
     }
     assert_eq!(table, help, "the table of §4 (option and default)");
+}
+
+#[test]
+fn version_is_that_of_the_package() {
+    for flag in ["--version", "-V"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_nicola-imesync")).arg(flag).output().unwrap();
+        assert!(out.status.success(), "{flag}");
+        assert_eq!(String::from_utf8(out.stdout).unwrap(), format!("nicola-imesync {}\n", env!("CARGO_PKG_VERSION")));
+    }
+}
+
+#[test]
+fn h_is_the_same_as_help() {
+    let run = |flag: &str| Command::new(env!("CARGO_BIN_EXE_nicola-imesync")).arg(flag).output().unwrap();
+    let (h, help) = (run("-h"), run("--help"));
+    assert!(h.status.success() && help.status.success());
+    assert_eq!(h.stdout, help.stdout);
 }

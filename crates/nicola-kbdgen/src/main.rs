@@ -16,7 +16,7 @@ fn usage() -> String {
 usage: nicola-kbdgen [options] > nicola.kbd
        nicola-kbdgen [options] --split -o kbd/nicola.kbd   # also writes kbd/{ENV_FILE}
   From the repository root: cargo run --release -p nicola-kbdgen -- [options]
-  (or the built target/release/nicola-kbdgen; it is not installed anywhere).
+  (or the built target/release/nicola-kbdgen; not on the PATH: install.sh copies it for the services).
 
 options:
   --layout <file>          layout definition (default: the bundled NICOLA J type)
@@ -34,6 +34,8 @@ options:
                            next to the -o file, and make the -o file read it with include (needs -o).
                            An existing {ENV_FILE} that differs is kept (it may have been edited by hand)
   --force                  with --split, overwrite an existing {ENV_FILE}
+  -h, --help               show this help
+  -V, --version            show the version
 "
     )
 }
@@ -71,7 +73,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         |args: &mut dyn Iterator<Item = String>, flag: &str| args.next().ok_or_else(|| format!("{flag} needs a value"));
     while let Some(a) = args.next() {
         match a.as_str() {
-            "--layout" => layout_src = std::fs::read_to_string(value(&mut args, &a)?)?,
+            "--layout" => {
+                let file = value(&mut args, &a)?;
+                layout_src = std::fs::read_to_string(&file).map_err(|e| format!("--layout {file}: {e}"))?;
+            }
             "--overlay" => overlays.push(value(&mut args, &a)?),
             "--thumbs" => (opt.thumb_left, opt.thumb_right) = thumb_keys(&value(&mut args, &a)?)?,
             "--toggle" => {
@@ -99,13 +104,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 print!("{}", usage());
                 return Ok(());
             }
+            "-V" | "--version" => {
+                println!("nicola-kbdgen {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
             _ => return Err(format!("unknown argument {a}").into()),
         }
     }
 
     let mut layout = LayoutDef::parse(&layout_src)?;
     for path in &overlays {
-        let src = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+        let src = std::fs::read_to_string(path).map_err(|e| format!("--overlay {path}: {e}"))?;
         layout.apply_overlay(&src).map_err(|e| format!("{path}: {e}"))?;
     }
     let parts = generate_parts(&layout, &opt)?;

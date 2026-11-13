@@ -51,6 +51,9 @@ const DEFAULT_IM: &str = "mozc";
 const DEFAULT_ON_LAYER: &str = "nicola";
 const DEFAULT_OFF_LAYER: &str = "base";
 
+/// `nicola-imesync <version>`: printed by `--version` and logged at the start.
+const VERSION_LINE: &str = concat!("nicola-imesync ", env!("CARGO_PKG_VERSION"));
+
 fn usage() -> String {
     format!(
         "\
@@ -65,6 +68,8 @@ options:
   --on-layer <name>   layer when ON (default {DEFAULT_ON_LAYER})
   --off-layer <name>  layer when OFF (default {DEFAULT_OFF_LAYER})
   --dry-run           do not send to kanata; only print state changes
+  -h, --help          show this help
+  -V, --version       show the version
 "
     )
 }
@@ -102,6 +107,10 @@ fn parse_args() -> Res<Opts> {
             "--dry-run" => o.dry_run = true,
             "-h" | "--help" => {
                 print!("{}", usage());
+                std::process::exit(0);
+            }
+            "-V" | "--version" => {
+                println!("{VERSION_LINE}");
                 std::process::exit(0);
             }
             _ => return Err(format!("unknown argument {a}").into()),
@@ -627,6 +636,8 @@ const RETRY: Duration = Duration::from_secs(1);
 
 fn run() -> Res<()> {
     let o = parse_args()?;
+    // Which version runs, for the log (journalctl, systemctl status).
+    println!("{VERSION_LINE}");
     let mut fcitx = Fcitx::new()?;
     if fcitx.menu.is_none() {
         eprintln!(

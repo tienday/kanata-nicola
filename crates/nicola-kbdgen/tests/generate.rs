@@ -1,6 +1,7 @@
 //! Generator tests: the romaji table covers every symbol in the layout, kanata can load every
 //! generated form, the prebuilt files in `kbd/` are up to date, the docs name only those files and the versions and
-//! options of the build, and the examples of editing them by hand and of an extra kanata file load.
+//! options of the build, `--version` prints the version of the package and `-h` the same as `--help`, and the examples
+//! of editing them by hand and of an extra kanata file load.
 
 mod common;
 mod repository;
@@ -331,11 +332,12 @@ fn docs_name_the_kanata_and_rust_versions() {
 fn docs_list_the_generator_options() {
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_nicola-kbdgen")).arg("--help").output().unwrap();
     let help = String::from_utf8(out.stdout).unwrap();
-    // An option starts a line after two spaces.
+    // An option starts a line after two spaces, and its names end at the next two ("  -h, --help   …").
     let mut in_help: Vec<String> = help
         .lines()
-        .filter_map(|l| l.strip_prefix("  -"))
-        .map(|l| format!("-{}", l.split_whitespace().next().unwrap()))
+        .filter_map(|l| l.strip_prefix("  ").filter(|l| l.starts_with('-')))
+        .flat_map(|l| l.split("  ").next().unwrap().split(", "))
+        .map(|o| o.split(' ').next().unwrap().to_string())
         .collect();
     in_help.sort();
 
@@ -348,8 +350,7 @@ fn docs_list_the_generator_options() {
     let options = |row: &[&str]| -> Vec<String> {
         row[0].split('`').skip(1).step_by(2).map(|o| o.split(' ').next().unwrap().to_string()).collect()
     };
-    let mut in_doc: Vec<String> =
-        rows.iter().flat_map(|r| options(r)).filter(|o| !matches!(o.as_str(), "-h" | "--help")).collect();
+    let mut in_doc: Vec<String> = rows.iter().flat_map(|r| options(r)).collect();
     in_doc.sort();
     assert_eq!(in_doc, in_help, "the options of docs/implementation.md §2.1");
 
@@ -359,6 +360,23 @@ fn docs_list_the_generator_options() {
     assert!(thumbs.contains(&format!("`{}:{}`", d.thumb_left, d.thumb_right)), "--thumbs: {thumbs}");
     let toggle = default("--toggle");
     assert!(toggle.contains(&format!("`{}`", d.toggle_key.as_deref().unwrap())), "--toggle: {toggle}");
+}
+
+#[test]
+fn version_is_that_of_the_package() {
+    for flag in ["--version", "-V"] {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_nicola-kbdgen")).arg(flag).output().unwrap();
+        assert!(out.status.success(), "{flag}");
+        assert_eq!(String::from_utf8(out.stdout).unwrap(), format!("nicola-kbdgen {}\n", env!("CARGO_PKG_VERSION")));
+    }
+}
+
+#[test]
+fn h_is_the_same_as_help() {
+    let run = |flag: &str| std::process::Command::new(env!("CARGO_BIN_EXE_nicola-kbdgen")).arg(flag).output().unwrap();
+    let (h, help) = (run("-h"), run("--help"));
+    assert!(h.status.success() && help.status.success());
+    assert_eq!(h.stdout, help.stdout);
 }
 
 /// The documents (every `.md` file) name only the files of `kbd/` as `.kbd` files, so that a renamed file of `kbd/`

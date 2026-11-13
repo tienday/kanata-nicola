@@ -61,6 +61,7 @@ cargo run --release -p nicola-kbdgen -- [options] [-o <file>]
 | `--split` | 環境固有設定（`defcfg`、Ctrl として扱うキー）を、`-o` の出力先と同じディレクトリの `user-custom.kbd` に分ける（`-o` が必要）。`-o` に出力する配列プロファイル（[設計書 §1.2](design.md#12-用語)）は、それを `include` で読み込む。既存の `user-custom.kbd` が生成する内容と異なる場合は、編集したものとみなして上書きしない | 分けない（1 つのファイルに出力する） |
 | `--force` | `--split` で、既存の環境固有設定も上書きする | — |
 | `-h`、`--help` | 使い方を表示する | — |
+| `-V`、`--version` | バージョンを表示する | — |
 
 ### 2.2 誤りの検査
 
@@ -136,6 +137,7 @@ nicola-imesync [--port <n>] [--fallback-ms <n>] [--im <name>] [--on-layer <name>
 | `--on-layer` / `--off-layer` | NICOLA が ON / OFF のときの kanata のレイヤ | `nicola` / `base` |
 | `--dry-run` | kanata へ送信せず、状態の変化を表示するだけにする | — |
 | `-h`、`--help` | 使い方を表示する | — |
+| `-V`、`--version` | バージョンを表示する | — |
 
 nicola-imesync は、次の処理を繰り返す。
 
@@ -169,7 +171,7 @@ fcitx5 の通知は、D-Bus のシグナルで受信する。受信するシグ�
 - 続けて届くシグナルをまとめる間隔
 - トレイ項目を作成し直したとき（fcitx5 やデスクトップのトレイの再起動、fcitx5 の UI の切り替え）の探し直し方
 
-**ログ:** fcitx5 の状態が変化するたびに、1 行を記録する。kanata との接続については、接続したとき、kanata が接続を閉じたとき、接続していた kanata へ送信できなくなったときに、1 行ずつ記録する。ログの例は、次のとおり。
+**ログ:** 起動時にバージョンを、fcitx5 の状態が変化するたびにその状態を、1 行ずつ記録する。kanata との接続については、接続したとき、kanata が接続を閉じたとき、接続していた kanata へ送信できなくなったときに、1 行ずつ記録する。ログの例は、次のとおり。
 
 ```text
   12.345s  fcitx5=2 im=mozc mozc=hiragana -> nicola  (by signal NewIcon)
@@ -301,7 +303,8 @@ flowchart TB
 |---|---|
 | 記録先 | 常駐サービスは systemd のユーザジャーナル（`journalctl --user`。見方は[導入と利用 §4](usage.md#4-トラブルへの対処)）。手動起動（`run.sh`）は `target/run/` のファイル（`kanata-<日時>.log`、`imesync-<日時>.log`） |
 | 記録内容（kanata） | 起動・終了、キーボードの取得と切断（`registering`・`removing` など）、警告とエラー。レイヤの切り替えは記録しない（生成する設定ファイルの `defcfg` の `log-layer-changes no`。理由は[設計書 §9](design.md#9-常駐)）。手動起動では、確認のために記録する（`--log-layer-changes`） |
-| 記録内容（nicola-imesync） | IME の状態の変化と、kanata との接続（[§4](#4-ime-同期nicola-imesync)） |
+| 記録内容（`kanata-nicola.service` の起動時） | kanata-nicola のバージョンと、読み込んだ設定ファイル（`config.env`） |
+| 記録内容（nicola-imesync） | バージョン（起動時）、IME の状態の変化、kanata との接続（[§4](#4-ime-同期nicola-imesync)） |
 | 入力した文字 | kanata・nicola-imesync のどちらも記録しない |
 | 保存期間 | kanata-nicola では決めず、システムの journald の設定（`/etc/systemd/journald.conf`）に従う。手動起動のログは、削除するまで残る |
 

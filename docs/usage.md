@@ -152,6 +152,7 @@ systemctl --user restart kanata-nicola     # 起動する・設定の変更を�
 systemctl --user stop kanata-nicola        # 停止する（次回のログイン時に再び起動する）
 systemctl --user disable kanata-nicola     # ログイン時に起動しないようにする（動作中の場合は動作を続ける。元に戻すには enable）
 systemctl --user status kanata-nicola kanata-nicola-imesync     # 状態を表示する
+~/.local/share/kanata-nicola/nicola-kbdgen --version            # インストールした kanata-nicola のバージョンを表示する
 ```
 
 - 起動の直後の数秒間は、キーを押さない（kanata がキーボードを取得するまでの間）。
