@@ -77,7 +77,12 @@ cp /usr/share/applications/org.fcitx.Fcitx5.desktop ~/.config/autostart/
 printf 'GTK_IM_MODULE=fcitx\nQT_IM_MODULE=fcitx\nXMODIFIERS=@im=fcitx\n' > ~/.config/environment.d/fcitx5.conf
 ```
 
-ログインし直した後（[§2](#2-導入) の手順 5）に、fcitx5 の設定（`fcitx5-configtool`）で、入力メソッドに「キーボード - 日本語」と「Mozc」を追加する。GNOME では、トレイを表示する拡張（AppIndicator の拡張。Ubuntu の標準のデスクトップでは有効）を、無効にしている場合は有効にする（IME 同期は、Mozc の入力モードをトレイのメニューから読み取る）。
+ログインし直した後（[§2](#2-導入) の手順 5）に、次の設定をする。
+
+- fcitx5 の設定（`fcitx5-configtool`）で、入力メソッドに「キーボード - 日本語」と「Mozc」を追加する。
+- GNOME では、次の拡張のどちらかを有効にする（Ubuntu の標準のデスクトップでは、トレイを表示する拡張が有効）。IME 同期は、Mozc の入力モードを、fcitx5 がトレイか入力パネルに表示する情報から読み取る。
+  - トレイを表示する拡張（AppIndicator の拡張）
+  - 入力パネルの拡張（Input Method Panel。入力中の文字や変換の候補を表示する）
 
 **ibus（Ubuntu の標準）:** NICOLA 切替キーの方式（[§3.1](#31-nicola-入力の-onoff)）で使用する。GNOME の入力ソースに「日本語」と「日本語 (Mozc)」の両方を追加し、「日本語 (Mozc)」を選択して使用する（「日本語 (Mozc)」だけでは、半角/全角で IME が切り替わらず、NICOLA だけが切り替わる）。
 
@@ -133,7 +138,7 @@ NICOLA は、IME で日本語を入力するときだけ ON にする。切り�
 
 | 方式 | 切り替え方 |
 |---|---|
-| IME 同期（推奨。fcitx5＋Mozc） | IME を切り替えるだけでよい。Mozc がひらがな・カタカナのときに ON、直接入力・英数のときに OFF になる。IME を切り替えるキー、マウス、ウィンドウの切り替え、トレイのメニューのどれで切り替えても追従する |
+| IME 同期（推奨。fcitx5＋Mozc） | IME を切り替えるだけでよい。Mozc がひらがな・カタカナのときに ON、直接入力・英数のときに OFF になる。IME を切り替えるキー、マウス、ウィンドウの切り替え、トレイや入力パネルのメニューのどれで切り替えても追従する |
 | NICOLA 切替キーの方式（既定。ibus はこの方式） | 半角/全角で、IME と NICOLA を一緒に切り替える。NICOLA は OFF で始まるので、IME も OFF にしておく。IME の実際の状態を参照しないため、ずれることがある。ずれた場合は、IME の側（トレイのメニュー等）で、IME の ON/OFF を NICOLA に合わせる |
 
 NICOLA が ON の間も、Ctrl・Alt・Super・Shift を押している間は、キーをそのまま出力する（Ctrl+C 等のショートカットや Shift+英字が機能する）。CapsLock を Ctrl にしている場合は、[§2.3](#23-設定ファイルの作成) の設定が必要である。
@@ -185,7 +190,7 @@ journalctl --user -u kanata-nicola-imesync --since today             # IME の�
 | 起動の失敗が続き、停止した | 失敗が続くと、systemd が再起動を中止する。原因を取り除いてから、`systemctl --user reset-failed kanata-nicola` と `systemctl --user restart kanata-nicola` を実行する |
 | NICOLA が ON のときだけ、Ctrl のショートカットが異なる動作になる（CapsLock+A で全選択にならず、Ctrl+U など別のキーとして機能する） | CapsLock を Ctrl にしている環境で起きる。`config.env` に `NICOLA_KEYS_AS_CTRL=KEY_CAPSLOCK` を記述する（[§2.3](#23-設定ファイルの作成)。GNOME では、記述しない場合は警告が表示される） |
 | IME が OFF なのに NICOLA が ON（ローマ字がそのまま入力される） | NICOLA 切替キーの方式のずれ。IME の側で合わせる（[§3.1](#31-nicola-入力の-onoff)）。fcitx5 の場合は、IME 同期（`NICOLA_IME_SYNC=1`）にすると起きない |
-| IME 同期で、NICOLA が IME に追従しない（Mozc が直接入力・英数のときも ON になる等） | GNOME では、トレイを表示する拡張が有効かを確認する（[§2.2](#22-ime-の準備)）。IME の状態を読み取れているかは、`cargo run -q --release -p nicola-imesync -- --dry-run` で確認できる。Mozc のモードを変更するたびに `fcitx5=2 im=mozc mozc=hiragana -> nicola` のような行が表示され、ひらがな・カタカナで `-> nicola`、それ以外で `-> base` の場合は、正しく読み取れている |
+| IME 同期で、NICOLA が IME に追従しない（Mozc が直接入力・英数のときも ON になる等） | GNOME では、トレイを表示する拡張か入力パネルの拡張が有効かを確認する（[§2.2](#22-ime-の準備)）。IME の状態を読み取れているかは、`cargo run -q --release -p nicola-imesync -- --dry-run` で確認できる。Mozc のモードを変更するたびに `fcitx5=2 im=mozc mozc=hiragana -> nicola` のような行が表示され、ひらがな・カタカナで `-> nicola`、それ以外で `-> base` の場合は、正しく読み取れている |
 | キーが押されたままになった | そのキーを一度押して離す。解消しない場合は、非常停止する（[§3.2](#32-起動停止)） |
 | キーボードを接続したときに、どのキーボードでも入力できなくなった（非常停止も機能しない） | kanata は、接続したキーボードのキーがすべて離されるまで、ほかのキーボードの入力も処理しない。接続したキーボードで押されているキーを離す。解消しない場合は、そのキーボードを取り外す |
 | 外付けキーボードを接続し直した後は、NICOLA で入力できない | ログでキーボードの再取得を確認する（上の 2 つ目のコマンド）。`NICOLA_KANATA_BIN` で別の kanata を指定している場合は、その指定を削除して `platform/linux/install.sh` を実行し、修正を適用した kanata を使用する |

@@ -2,9 +2,10 @@
 //!
 //! Runs in the user session, reads the fcitx5 state over D-Bus, and sends layer changes to the kanata TCP port.
 //!
-//! To keep the load low, it reads the state only when fcitx5 sends a change notification (D-Bus signals
-//! from its tray item and the item's menu; other applications' tray items are filtered out by sender)
-//! (docs/design.md, IME sync). In case a notification is missed, it also reads at a low rate
+//! To keep the load low, it reads the state only when fcitx5 sends a change notification (D-Bus signals: any signal
+//! of fcitx5, whichever user interface it uses, and those of its tray item and the item's menu; other applications'
+//! tray items are filtered out by sender) (docs/design.md, IME sync). For one change, fcitx5 sends several signals at
+//! once; one read covers them ([`BURST_GAP`]). In case a notification is missed, it also reads at a low rate
 //! (`--fallback-ms`). The log shows which of the two found the change.
 //! This replaces toggling the IME and NICOLA separately with a key (docs/design.md, IME sync), which drifts
 //! out of step with per-window input state (fcitx5 ShareInputState=No), the mouse, and Mozc's internal switching.
@@ -13,7 +14,8 @@
 //!   1. an input context has the focus (Controller1.State is not 0)
 //!   2. the input method is the one given by `--im`
 //!   3. the Mozc input mode is a kana mode (hiragana, katakana). OFF in direct input and alphanumeric modes
-//!      (read from the tray menu; if unreadable, decided by 1 and 2 only)
+//!      (read from the tray menu, or else taken from the signals of fcitx5 [`mode_in_signal`]; if neither tells it,
+//!      decided by 1 and 2 only)
 //!
 //! Not "fcitx5 is active" (State = 2): fcitx5 calls it active when the input method is not the first of the group,
 //! so with Mozc first in the list, Mozc is in use while fcitx5 is inactive (State = 1).
@@ -25,6 +27,7 @@
 //!
 //! Options: see [`usage`] (`--help`).
 
+use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,7 +37,7 @@ use std::time::{Duration, Instant};
 use dbus::arg::{RefArg, Variant};
 use dbus::blocking::stdintf::org_freedesktop_dbus::Properties;
 use dbus::blocking::Connection;
-use dbus::channel::Token;
+use dbus::channel::MatchingReceiver;
 use dbus::message::{MatchRule, MessageType};
 use dbus::strings::BusName;
 use dbus::Message;
@@ -144,24 +147,65 @@ struct Fcitx {
     mode_item: Option<i32>,
     /// After a lookup that did not find that item: not before this time ([`MODE_LOOKUP_INTERVAL`]).
     next_mode_lookup: Option<Instant>,
-    /// Subscriptions to the notifications of the tray item and its menu (renewed with the tray item).
-    subscriptions: Vec<Token>,
-    /// Name of the last notification received. The main loop takes it and reads the state.
-    notified: Arc<Mutex<Option<String>>>,
+    /// Match rules for the notifications of the tray item and its menu (renewed with the tray item).
+    tray_rules: Vec<String>,
+    /// What the signals received tell (recorded by the handler that [`Fcitx::new`] sets up).
+    signals: Arc<Mutex<Signals>>,
+}
+
+/// What the signals received tell the main loop.
+#[derive(Default)]
+struct Signals {
+    /// Name of the last signal received. The main loop takes it and reads the state.
+    last: Option<String>,
+    /// A tray item was registered: the main loop looks the fcitx5 tray item up again.
+    item_registered: bool,
+    /// The Mozc input mode named by the last signal that named one ([`mode_in_signal`]).
+    mozc_mode: Option<String>,
+}
+
+impl Signals {
+    fn record(&mut self, msg: &Message) {
+        // Only signals to all (fcitx5 and the tray send those), which the bus passes by the senders of the match rules.
+        // A signal addressed to this program would come from any program of the user.
+        if msg.destination().is_some() {
+            return;
+        }
+        let name = msg.member().map(|m| m.to_string()).unwrap_or_default();
+        if name == ITEM_REGISTERED {
+            self.item_registered = true;
+        } else if let Some(mode) = mode_in_signal(msg) {
+            self.mozc_mode = Some(mode);
+        }
+        self.last = Some(name);
+    }
 }
 
 const TIMEOUT: Duration = Duration::from_millis(300);
+
+/// Bus name of fcitx5.
+const FCITX5: &str = "org.fcitx.Fcitx5";
+
+/// How long to wait for more signals after one, so that the state is read once for the signals that fcitx5 sends
+/// together for one change (within a millisecond or so; for each key press, some fcitx5 user interfaces send
+/// several). It delays the switch by this much.
+const BURST_GAP: Duration = Duration::from_millis(2);
+
+/// At most this many signals are taken in before the read, so that a steady stream of them does not hold it off
+/// (fcitx5 sends some 15 for one change).
+const BURST_MAX: usize = 100;
 
 /// How long the item of the Mozc modes is not looked up again after a lookup did not find it (unless a tray
 /// item registers): each lookup asks every tray item for its id and reads the whole menu, with AboutToShow.
 /// Short, as the mode is unknown meanwhile (conditions 1 and 2 decide).
 const MODE_LOOKUP_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Name of the Mozc input method in fcitx5. Its input mode can be read from its tray icons.
+/// Name of the Mozc input method in fcitx5. Its input mode can be read from its icons ([`Fcitx::mozc_mode`]).
 const MOZC_IM: &str = "mozc";
 
 /// Signal of the tray host when an application (re)registers a tray item. fcitx5 registers its item
-/// again under a new bus name when it restarts or the tray host comes back (e.g. after unlocking).
+/// again under a new bus name when it restarts, the tray host comes back (e.g. after unlocking), or fcitx5 goes back
+/// to the tray from another user interface (an input panel of the desktop).
 const ITEM_REGISTERED: &str = "StatusNotifierItemRegistered";
 
 impl Fcitx {
@@ -172,28 +216,56 @@ impl Fcitx {
             menu: None,
             mode_item: None,
             next_mode_lookup: None,
-            subscriptions: Vec::new(),
-            notified: Arc::new(Mutex::new(None)),
+            tray_rules: Vec::new(),
+            signals: Arc::default(),
         };
-        let n = Arc::clone(&f.notified);
-        f.conn.add_match(
-            MatchRule::new_signal("org.kde.StatusNotifierWatcher", ITEM_REGISTERED)
-                .with_sender("org.kde.StatusNotifierWatcher"),
-            move |(): (), _, msg| {
-                notify(&n, msg);
+        // One handler for the signals of all the match rules below. With a handler per rule, the library would give a
+        // signal to the first rule that matches it only, and in the library, a rule with a well-known sender name
+        // (FCITX5) matches the signals of every sender (the bus does that check).
+        let s = Arc::clone(&f.signals);
+        f.conn.start_receive(
+            MatchRule::new().with_type(MessageType::Signal),
+            Box::new(move |msg, _| {
+                s.lock().unwrap().record(&msg);
                 true
-            },
-        )?;
+            }),
+        );
+        let registered = MatchRule::new_signal("org.kde.StatusNotifierWatcher", ITEM_REGISTERED)
+            .with_sender("org.kde.StatusNotifierWatcher");
+        f.conn.add_match_no_cb(&registered.match_str())?;
+        // Any signal of fcitx5, whatever its interface: what it sends depends on the user interface it uses. The bus
+        // matches the name to its current owner, also after fcitx5 restarts.
+        f.conn.add_match_no_cb(&MatchRule::new().with_type(MessageType::Signal).with_sender(FCITX5).match_str())?;
         f.find_menu();
         Ok(f)
+    }
+
+    /// The name of the last signal received, if any, once the signals that follow it closely ([`BURST_GAP`]) are
+    /// in too. Looks the fcitx5 tray item up again if a tray item was registered.
+    fn take_signal(&mut self) -> Result<Option<String>, dbus::Error> {
+        if self.signals.lock().unwrap().last.is_none() {
+            return Ok(None);
+        }
+        for _ in 0..BURST_MAX {
+            if !self.conn.process(BURST_GAP)? {
+                break;
+            }
+        }
+        let (last, registered) = {
+            let mut s = self.signals.lock().unwrap();
+            (s.last.take(), std::mem::take(&mut s.item_registered))
+        };
+        if registered {
+            self.find_menu();
+        }
+        Ok(last)
     }
 
     /// Calls a Controller1 method without D-Bus activation: the session bus would otherwise start fcitx5
     /// from its D-Bus service file when it is not running (for example after the user quit it).
     fn controller<R: dbus::arg::Arg + for<'a> dbus::arg::Get<'a>>(&self, method: &str) -> Result<R, dbus::Error> {
-        let mut msg =
-            Message::new_method_call("org.fcitx.Fcitx5", "/controller", "org.fcitx.Fcitx.Controller1", method)
-                .map_err(|e| dbus::Error::new_failed(&e))?;
+        let mut msg = Message::new_method_call(FCITX5, "/controller", "org.fcitx.Fcitx.Controller1", method)
+            .map_err(|e| dbus::Error::new_failed(&e))?;
         msg.set_auto_start(false);
         let reply = self.conn.channel().send_with_reply_and_block(msg, TIMEOUT)?;
         reply.read1().map_err(|e| dbus::Error::new_failed(&e.to_string()))
@@ -216,21 +288,19 @@ impl Fcitx {
         self.menu = found;
         self.mode_item = None;
         self.next_mode_lookup = None;
-        for t in self.subscriptions.drain(..) {
-            let _ = self.conn.remove_match(t);
+        for rule in self.tray_rules.drain(..) {
+            let _ = self.conn.remove_match_no_cb(&rule);
         }
         let Some((dest, _)) = &self.menu else { return };
         let Ok(sender) = BusName::new(dest.clone()) else { return };
         for iface in ["org.kde.StatusNotifierItem", "com.canonical.dbusmenu"] {
-            let n = Arc::clone(&self.notified);
-            let rule =
-                MatchRule::new().with_type(MessageType::Signal).with_interface(iface).with_sender(sender.clone());
-            let added = self.conn.add_match(rule, move |(): (), _, msg| {
-                notify(&n, msg);
-                true
-            });
-            match added {
-                Ok(t) => self.subscriptions.push(t),
+            let rule = MatchRule::new()
+                .with_type(MessageType::Signal)
+                .with_interface(iface)
+                .with_sender(sender.clone())
+                .match_str();
+            match self.conn.add_match_no_cb(&rule) {
+                Ok(()) => self.tray_rules.push(rule),
                 Err(e) => eprintln!("cannot subscribe to the notifications of the fcitx5 tray item: {e}"),
             }
         }
@@ -257,10 +327,15 @@ impl Fcitx {
         None
     }
 
+    /// The Mozc input mode: read from the tray menu, or else the one that the signals of fcitx5 named last.
+    fn mozc_mode(&mut self) -> Option<String> {
+        self.tray_mode().or_else(|| self.signals.lock().unwrap().mozc_mode.clone())
+    }
+
     /// Reads the Mozc input mode from the tray menu: the item whose children are the modes (one is the direct
     /// mode). fcitx5-mozc 2.26 shows the current mode in that item's icon; 2.29 (Ubuntu 26.04) marks the
     /// selected child (a radio item) and names the icons with _ instead of - ([`mode_of`]).
-    fn mozc_mode(&mut self) -> Option<String> {
+    fn tray_mode(&mut self) -> Option<String> {
         // Without a tray item, it is looked up again when one is registered (ITEM_REGISTERED).
         self.menu.as_ref()?;
         if let Some(mode) = self.mode_item.and_then(|id| self.read_mode_icon(id)) {
@@ -326,10 +401,34 @@ fn off_after_error(error_name: Option<&str>, consecutive: u32) -> bool {
     absent || consecutive >= 2
 }
 
-/// Records a received notification for the main loop.
-fn notify(notified: &Mutex<Option<String>>, msg: &dbus::Message) {
-    let name = msg.member().map(|m| m.to_string()).unwrap_or_default();
-    *notified.lock().unwrap() = Some(name);
+/// The Mozc input mode that a signal names, if it names exactly one: an icon name of a mode ([`mode_name`]) as a word
+/// in the strings of its arguments. fcitx5 sends the icon of the current input method, which shows the Mozc mode, to
+/// a user interface that is not the tray (e.g. an input panel of the desktop), so the mode is known without the tray.
+/// A signal that names several modes lists them (e.g. a menu of the modes) and does not tell the current one.
+/// The strings can hold the text being typed (an input panel shows it): only the mode is kept, and nothing is logged.
+fn mode_in_signal(msg: &Message) -> Option<String> {
+    fn strings(arg: &dyn RefArg, out: &mut Vec<String>) {
+        if let Some(s) = arg.as_str() {
+            out.push(s.to_string());
+        } else if let Some(items) = arg.as_iter() {
+            items.for_each(|a| strings(a, out));
+        }
+    }
+    let mut all = Vec::new();
+    msg.iter_init().for_each(|arg| strings(&*arg, &mut all));
+    mode_in(all.iter().map(String::as_str))
+}
+
+/// The Mozc input mode named by icon names ([`mode_name`]) as words in `strings`, if they name exactly one.
+fn mode_in<'a>(strings: impl Iterator<Item = &'a str>) -> Option<String> {
+    let in_word = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
+    let mut modes: BTreeSet<String> =
+        strings.flat_map(|s| s.split(move |c| !in_word(c))).filter_map(mode_name).collect();
+    if modes.len() == 1 {
+        modes.pop_first()
+    } else {
+        None
+    }
 }
 
 /// Unwraps nested variants.
@@ -517,7 +616,10 @@ fn run() -> Res<()> {
     let o = parse_args()?;
     let mut fcitx = Fcitx::new()?;
     if fcitx.menu.is_none() {
-        eprintln!("note: fcitx5 tray item not found; the Mozc input mode is read once it appears");
+        eprintln!(
+            "note: fcitx5 tray item not found; the Mozc input mode is read once it appears, or taken from the signals \
+             of fcitx5"
+        );
     }
     let mut kanata = Kanata::new(o.port);
     let start = Instant::now();
@@ -601,17 +703,15 @@ fn run() -> Res<()> {
             if left.is_zero() {
                 break "poll".to_string();
             }
-            fcitx.conn.process(left.min(RETRY))?;
-            if let Some(sig) = fcitx.notified.lock().unwrap().take() {
+            // At least 1 ms: the library waits whole milliseconds, so less would not wait and the loop would spin.
+            fcitx.conn.process(left.clamp(Duration::from_millis(1), RETRY))?;
+            if let Some(sig) = fcitx.take_signal()? {
                 break format!("signal {sig}");
             }
             if kanata.lost() {
                 break "kanata reconnect".to_string();
             }
         };
-        if cause.ends_with(ITEM_REGISTERED) {
-            fcitx.find_menu();
-        }
     }
 }
 
@@ -622,8 +722,12 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use dbus::arg::{PropMap, RefArg, Variant};
+    use dbus::Message;
 
-    use super::{find_in, layer_name, mode_name, mode_of, off_after_error, tray_item_address, ImeState, Kanata};
+    use super::{
+        find_in, layer_name, mode_in, mode_in_signal, mode_name, mode_of, off_after_error, tray_item_address, ImeState,
+        Kanata, Signals,
+    };
 
     /// The Mozc mode from the tray menu of fcitx5-mozc 2.26 (the item's icon) and 2.29 (Ubuntu 26.04: the
     /// selected child, icons named with _).
@@ -645,6 +749,63 @@ mod tests {
         assert_eq!(mode_of(Some("fcitx_mozc_tool"), &kids), m("direct"));
         // Nothing selected and no mode in the item's icon: unknown.
         assert_eq!(mode_of(Some("fcitx_mozc_tool"), &[(Some("fcitx_mozc_direct"), false)]), None);
+    }
+
+    /// The Mozc mode from the strings of a signal: what fcitx5 5.1 with fcitx5-mozc 2.28 sends to the input panel
+    /// of the desktop (GNOME's Input Method Panel extension) when the input method, the mode, or the focus changes.
+    #[test]
+    fn mozc_mode_from_the_strings_of_a_signal() {
+        let m = |s: &str| Some(s.to_string());
+        let mode = |strings: &[&str]| mode_in(strings.iter().copied());
+        let tool = "/Fcitx/mozc-tool:Mozc の設定:fcitx-mozc-tool:Mozc の設定:menu";
+        assert_eq!(mode(&["/Fcitx/im:Mozc:fcitx-mozc-hiragana:全角かな:menu,label=あ", tool]), m("hiragana"));
+        assert_eq!(mode(&["/Fcitx/im:Mozc:fcitx-mozc-katakana-full:全角カナ:menu,label=あ"]), m("katakana-full"));
+        assert_eq!(mode(&["/Fcitx/im:Mozc:fcitx-mozc-direct:直接入力:menu,label=あ"]), m("direct"));
+        // Icons named with _ (fcitx5-mozc 2.29).
+        assert_eq!(mode(&["/Fcitx/im:Mozc:fcitx_mozc_alpha_half:半角英数:menu"]), m("alpha-half"));
+        // Another input method, the tool, the input method's own icon, and text that is not an icon name.
+        assert_eq!(mode(&["/Fcitx/im:キーボード - 日本語:input-keyboard-symbolic::menu,label=ja"]), None);
+        assert_eq!(mode(&[tool, "/Fcitx/im/mozc:Mozc:fcitx-mozc::", "[Tabキーで選択]", ""]), None);
+        assert_eq!(mode(&["/Fcitx/mozc-mode-hiragana:全角かな:x:全角かな:"]), None);
+        // The menu of the modes names them all: not the current one.
+        let menu = [
+            "/Fcitx/mozc-mode-direct:直接入力:fcitx-mozc-direct:直接入力:",
+            "/Fcitx/mozc-mode-hiragana:全角かな:fcitx-mozc-hiragana:全角かな:",
+        ];
+        assert_eq!(mode(&menu), None);
+        // The same mode twice is still one.
+        assert_eq!(mode(&["a:fcitx-mozc-hiragana:b", "fcitx-mozc-hiragana"]), m("hiragana"));
+    }
+
+    /// The strings of a signal are found in its arguments of any type (arrays, variants, dictionaries).
+    #[test]
+    fn strings_of_a_signal_in_any_argument() {
+        let signal = || Message::new_signal("/panel", "org.example.Panel", "Update").unwrap();
+        let msg = signal().append2(vec!["x".to_string(), "/a:Mozc:fcitx-mozc-katakana-full:b".to_string()], 1i32);
+        assert_eq!(mode_in_signal(&msg).as_deref(), Some("katakana-full"));
+        let mut props = PropMap::new();
+        props.insert("icon".into(), Variant(Box::new("fcitx_mozc_direct".to_string()) as Box<dyn RefArg>));
+        assert_eq!(mode_in_signal(&signal().append1(props)).as_deref(), Some("direct"));
+        assert_eq!(mode_in_signal(&signal().append1(Variant("fcitx-mozc-hiragana"))).as_deref(), Some("hiragana"));
+        assert_eq!(mode_in_signal(&signal().append2(7u32, true)), None);
+        assert_eq!(mode_in_signal(&signal()), None);
+    }
+
+    /// Signals to all are recorded; one addressed to this program is not (any program of the user could send it).
+    #[test]
+    fn only_signals_to_all_are_recorded() {
+        let signal =
+            || Message::new_signal("/panel", "org.example.Panel", "Update").unwrap().append1("fcitx-mozc-direct");
+        let mut s = Signals::default();
+        let mut to_us = signal();
+        to_us.set_destination(Some(":1.42".into()));
+        s.record(&to_us);
+        assert_eq!((s.last.as_deref(), s.mozc_mode.as_deref()), (None, None));
+        s.record(&signal());
+        assert_eq!((s.last.as_deref(), s.mozc_mode.as_deref()), (Some("Update"), Some("direct")));
+        let registered = Message::new_signal("/w", "org.kde.StatusNotifierWatcher", super::ITEM_REGISTERED).unwrap();
+        s.record(&registered);
+        assert!(s.item_registered);
     }
 
     /// The item of the Mozc modes in a menu shaped like the reply of GetLayout: the one with a child that has the
