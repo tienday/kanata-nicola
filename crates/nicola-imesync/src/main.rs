@@ -186,13 +186,14 @@ const TIMEOUT: Duration = Duration::from_millis(300);
 /// Bus name of fcitx5.
 const FCITX5: &str = "org.fcitx.Fcitx5";
 
-/// How long to wait for more signals after one, so that the state is read once for the signals that fcitx5 sends
-/// together for one change (within a millisecond or so; for each key press, some fcitx5 user interfaces send
-/// several). It delays the switch by this much.
+/// How long to wait for more messages after a signal, so that the state is read once for the signals that fcitx5
+/// sends together for one change (within a millisecond or so; for each key press, some fcitx5 user interfaces send
+/// several). It delays the switch by this much after the last of them.
 const BURST_GAP: Duration = Duration::from_millis(2);
 
-/// At most this many signals are taken in before the read, so that a steady stream of them does not hold it off
-/// (fcitx5 sends some 15 for one change).
+/// At most this many messages (of any kind, not only signals) are taken in before the read, so that a steady stream
+/// does not hold it off (fcitx5 sends some 15 signals for one change). The delay is thus at most
+/// `BURST_MAX` × [`BURST_GAP`], reached only while messages keep coming less than [`BURST_GAP`] apart.
 const BURST_MAX: usize = 100;
 
 /// How long the item of the Mozc modes is not looked up again after a lookup did not find it (unless a tray
@@ -208,9 +209,23 @@ const MOZC_IM: &str = "mozc";
 /// to the tray from another user interface (an input panel of the desktop).
 const ITEM_REGISTERED: &str = "StatusNotifierItemRegistered";
 
+/// The tray host (its bus name and interface; it lists the tray items).
+const TRAY_WATCHER: &str = "org.kde.StatusNotifierWatcher";
+/// Interface of a tray item.
+const TRAY_ITEM: &str = "org.kde.StatusNotifierItem";
+/// Interface of the menu of a tray item.
+const TRAY_MENU: &str = "com.canonical.dbusmenu";
+
+/// A menu item in a reply of `GetLayout`: its id, properties and children.
+type Node = (i32, dbus::arg::PropMap, Vec<Variant<Box<dyn RefArg>>>);
+
 impl Fcitx {
     fn new() -> Res<Self> {
-        let conn = Connection::new_session()?;
+        Self::with_connection(Connection::new_session()?)
+    }
+
+    /// On a given bus connection (the tests use a bus of their own).
+    fn with_connection(conn: Connection) -> Res<Self> {
         let mut f = Self {
             conn,
             menu: None,
@@ -230,8 +245,7 @@ impl Fcitx {
                 true
             }),
         );
-        let registered = MatchRule::new_signal("org.kde.StatusNotifierWatcher", ITEM_REGISTERED)
-            .with_sender("org.kde.StatusNotifierWatcher");
+        let registered = MatchRule::new_signal(TRAY_WATCHER, ITEM_REGISTERED).with_sender(TRAY_WATCHER);
         f.conn.add_match_no_cb(&registered.match_str())?;
         // Any signal of fcitx5, whatever its interface: what it sends depends on the user interface it uses. The bus
         // matches the name to its current owner, also after fcitx5 restarts.
@@ -240,8 +254,8 @@ impl Fcitx {
         Ok(f)
     }
 
-    /// The name of the last signal received, if any, once the signals that follow it closely ([`BURST_GAP`]) are
-    /// in too. Looks the fcitx5 tray item up again if a tray item was registered.
+    /// The name of the last signal received, if any, once the messages that follow it closely ([`BURST_GAP`], at
+    /// most [`BURST_MAX`]) are processed too. Looks the fcitx5 tray item up again if a tray item was registered.
     fn take_signal(&mut self) -> Result<Option<String>, dbus::Error> {
         if self.signals.lock().unwrap().last.is_none() {
             return Ok(None);
@@ -293,7 +307,7 @@ impl Fcitx {
         }
         let Some((dest, _)) = &self.menu else { return };
         let Ok(sender) = BusName::new(dest.clone()) else { return };
-        for iface in ["org.kde.StatusNotifierItem", "com.canonical.dbusmenu"] {
+        for iface in [TRAY_ITEM, TRAY_MENU] {
             let rule = MatchRule::new()
                 .with_type(MessageType::Signal)
                 .with_interface(iface)
@@ -307,20 +321,19 @@ impl Fcitx {
     }
 
     fn lookup_menu(&self) -> Option<(String, String)> {
-        let watcher = self.conn.with_proxy("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher", TIMEOUT);
-        let Ok(items) = watcher.get::<Vec<String>>("org.kde.StatusNotifierWatcher", "RegisteredStatusNotifierItems")
-        else {
+        let watcher = self.conn.with_proxy(TRAY_WATCHER, "/StatusNotifierWatcher", TIMEOUT);
+        let Ok(items) = watcher.get::<Vec<String>>(TRAY_WATCHER, "RegisteredStatusNotifierItems") else {
             return None;
         };
         for item in items {
             // An item of another program that is not a valid name is skipped (with_proxy would panic on it).
             let Some((dest, path)) = tray_item_address(&item) else { continue };
             let sni = self.conn.with_proxy(dest.as_str(), path.as_str(), TIMEOUT);
-            let id: Result<String, _> = sni.get("org.kde.StatusNotifierItem", "Id");
+            let id: Result<String, _> = sni.get(TRAY_ITEM, "Id");
             if id.ok().as_deref() != Some("Fcitx") {
                 continue;
             }
-            if let Ok(menu) = sni.get::<dbus::Path>("org.kde.StatusNotifierItem", "Menu") {
+            if let Ok(menu) = sni.get::<dbus::Path>(TRAY_ITEM, "Menu") {
                 return Some((dest, menu.to_string()));
             }
         }
@@ -368,9 +381,8 @@ impl Fcitx {
         let menu = self.conn.with_proxy(dest.as_str(), path.as_str(), TIMEOUT);
         // The item and its children (fcitx5 does not implement GetProperty). The toggle states are current
         // without AboutToShow, which would make fcitx5 send LayoutUpdated, and that would make us read again.
-        type Node = (i32, dbus::arg::PropMap, Vec<Variant<Box<dyn RefArg>>>);
         let r: Result<(u32, Node), _> =
-            menu.method_call("com.canonical.dbusmenu", "GetLayout", (id, 1i32, vec!["icon-name", "toggle-state"]));
+            menu.method_call(TRAY_MENU, "GetLayout", (id, 1i32, vec!["icon-name", "toggle-state"]));
         let (_rev, (_id, props, children)) = r.ok()?;
         let parent_icon = props.get("icon-name").and_then(|v| v.0.as_str().map(String::from));
         let kids: Vec<MenuItem> = children.iter().filter_map(|c| item(c as &dyn RefArg)).collect();
@@ -381,10 +393,8 @@ impl Fcitx {
     fn find_mode_item(&self) -> Option<i32> {
         let (dest, path) = self.menu.clone()?;
         let menu = self.conn.with_proxy(dest.as_str(), path.as_str(), TIMEOUT);
-        let _: Result<(bool,), _> = menu.method_call("com.canonical.dbusmenu", "AboutToShow", (0i32,));
-        type Node = (i32, dbus::arg::PropMap, Vec<Variant<Box<dyn RefArg>>>);
-        let r: Result<(u32, Node), _> =
-            menu.method_call("com.canonical.dbusmenu", "GetLayout", (0i32, -1i32, Vec::<String>::new()));
+        let _: Result<(bool,), _> = menu.method_call(TRAY_MENU, "AboutToShow", (0i32,));
+        let r: Result<(u32, Node), _> = menu.method_call(TRAY_MENU, "GetLayout", (0i32, -1i32, Vec::<String>::new()));
         let (_rev, root) = r.ok()?;
         find_in(&root.2)
     }
@@ -406,6 +416,9 @@ fn off_after_error(error_name: Option<&str>, consecutive: u32) -> bool {
 /// a user interface that is not the tray (e.g. an input panel of the desktop), so the mode is known without the tray.
 /// A signal that names several modes lists them (e.g. a menu of the modes) and does not tell the current one.
 /// The strings can hold the text being typed (an input panel shows it): only the mode is kept, and nothing is logged.
+/// That text, or a candidate, that holds an icon name as a word is taken as the mode too, until a signal names
+/// another (a known limit, docs/implementation.md §4; matching the form of what fcitx5 sends would depend on one
+/// user interface).
 fn mode_in_signal(msg: &Message) -> Option<String> {
     fn strings(arg: &dyn RefArg, out: &mut Vec<String>) {
         if let Some(s) = arg.as_str() {
@@ -483,7 +496,7 @@ fn item(arg: &dyn RefArg) -> Option<MenuItem<'_>> {
 }
 
 /// The Mozc input mode that an icon name stands for ("hiragana", "katakana-full", "alpha-half", "direct", ...):
-/// fcitx-mozc-hiragana (fcitx5-mozc 2.26) or fcitx_mozc_hiragana (2.29). None for other icons (the tool).
+/// fcitx-mozc-hiragana (fcitx5-mozc 2.26 and 2.28) or fcitx_mozc_hiragana (2.29). None for other icons (the tool).
 fn mode_name(icon: &str) -> Option<String> {
     let mode = icon.replace('_', "-").strip_prefix("fcitx-mozc-")?.to_string();
     let known = ["direct", "hiragana", "katakana", "alpha"].iter().any(|m| mode.starts_with(m));
@@ -719,14 +732,19 @@ fn run() -> Res<()> {
 mod tests {
     use std::io::{BufRead, BufReader};
     use std::net::{TcpListener, TcpStream};
+    use std::path::PathBuf;
+    use std::process::{Child, Command, Stdio};
     use std::time::{Duration, Instant};
 
     use dbus::arg::{PropMap, RefArg, Variant};
+    use dbus::blocking::Connection;
+    use dbus::channel::Channel;
+    use dbus::strings::BusName;
     use dbus::Message;
 
     use super::{
-        find_in, layer_name, mode_in, mode_in_signal, mode_name, mode_of, off_after_error, tray_item_address, ImeState,
-        Kanata, Signals,
+        find_in, layer_name, mode_in, mode_in_signal, mode_name, mode_of, off_after_error, tray_item_address, Fcitx,
+        ImeState, Kanata, Signals, FCITX5, ITEM_REGISTERED, TRAY_WATCHER,
     };
 
     /// The Mozc mode from the tray menu of fcitx5-mozc 2.26 (the item's icon) and 2.29 (Ubuntu 26.04: the
@@ -751,8 +769,9 @@ mod tests {
         assert_eq!(mode_of(Some("fcitx_mozc_tool"), &[(Some("fcitx_mozc_direct"), false)]), None);
     }
 
-    /// The Mozc mode from the strings of a signal: what fcitx5 5.1 with fcitx5-mozc 2.28 sends to the input panel
-    /// of the desktop (GNOME's Input Method Panel extension) when the input method, the mode, or the focus changes.
+    /// The Mozc mode from the strings of a signal: what fcitx5 5.1 with fcitx5-mozc 2.28 and 2.29 sends to the input
+    /// panel of the desktop (GNOME's Input Method Panel extension) when the input method, the mode, or the focus
+    /// changes.
     #[test]
     fn mozc_mode_from_the_strings_of_a_signal() {
         let m = |s: &str| Some(s.to_string());
@@ -762,7 +781,7 @@ mod tests {
         assert_eq!(mode(&["/Fcitx/im:Mozc:fcitx-mozc-katakana-full:全角カナ:menu,label=あ"]), m("katakana-full"));
         assert_eq!(mode(&["/Fcitx/im:Mozc:fcitx-mozc-direct:直接入力:menu,label=あ"]), m("direct"));
         // Icons named with _ (fcitx5-mozc 2.29).
-        assert_eq!(mode(&["/Fcitx/im:Mozc:fcitx_mozc_alpha_half:半角英数:menu"]), m("alpha-half"));
+        assert_eq!(mode(&["/Fcitx/im:Mozc:fcitx_mozc_alpha_half:Half ASCII:menu,label=あ"]), m("alpha-half"));
         // Another input method, the tool, the input method's own icon, and text that is not an icon name.
         assert_eq!(mode(&["/Fcitx/im:キーボード - 日本語:input-keyboard-symbolic::menu,label=ja"]), None);
         assert_eq!(mode(&[tool, "/Fcitx/im/mozc:Mozc:fcitx-mozc::", "[Tabキーで選択]", ""]), None);
@@ -775,6 +794,9 @@ mod tests {
         assert_eq!(mode(&menu), None);
         // The same mode twice is still one.
         assert_eq!(mode(&["a:fcitx-mozc-hiragana:b", "fcitx-mozc-hiragana"]), m("hiragana"));
+        // A known limit: text being typed (the preedit text and its attributes) that holds an icon name is taken as
+        // the mode.
+        assert_eq!(mode(&["fcitx-mozc-direct", ""]), m("direct"));
     }
 
     /// The strings of a signal are found in its arguments of any type (arrays, variants, dictionaries).
@@ -803,7 +825,7 @@ mod tests {
         assert_eq!((s.last.as_deref(), s.mozc_mode.as_deref()), (None, None));
         s.record(&signal());
         assert_eq!((s.last.as_deref(), s.mozc_mode.as_deref()), (Some("Update"), Some("direct")));
-        let registered = Message::new_signal("/w", "org.kde.StatusNotifierWatcher", super::ITEM_REGISTERED).unwrap();
+        let registered = Message::new_signal("/w", super::TRAY_WATCHER, super::ITEM_REGISTERED).unwrap();
         s.record(&registered);
         assert!(s.item_registered);
     }
@@ -922,5 +944,178 @@ mod tests {
         assert_eq!(read_line(&conn), r#"{"ChangeLayer":{"new":"nicola"}}"#);
         kanata.sync("base").unwrap();
         assert_eq!(read_line(&conn), r#"{"ChangeLayer":{"new":"base"}}"#);
+    }
+
+    /// The configuration of a bus of a test's own: no services to start, any connection may own a name, send and
+    /// receive. The socket goes to `{dir}`.
+    const BUS_CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:dir={dir}</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*"/>
+    <allow receive_sender="*"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+"#;
+
+    /// An interface of the input panel's signals in the tests: nicola-imesync takes signals of any interface.
+    const PANEL: &str = "org.example.Panel";
+
+    /// A dbus-daemon of a test's own (not the session bus), stopped when dropped. Its configuration and socket are in a
+    /// directory of its own, removed when dropped: the daemon is killed, so it cannot remove its socket. The directory
+    /// is in the user's runtime directory (`XDG_RUNTIME_DIR`): only the user can use it, whereas in the shared /tmp
+    /// another user could prepare the predictable path (with a link in it, for example). Its path is also short enough
+    /// for a socket.
+    struct TestBus {
+        daemon: Child,
+        address: String,
+        dir: PathBuf,
+    }
+
+    impl TestBus {
+        /// None where dbus-daemon is not installed or `XDG_RUNTIME_DIR` is not set: the test is then skipped.
+        fn start(name: &str) -> Option<Self> {
+            let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") else {
+                eprintln!("skipped: XDG_RUNTIME_DIR is not set");
+                return None;
+            };
+            let dir = PathBuf::from(runtime).join(format!("nicola-imesync-test-{}-{name}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let config = dir.join("bus.conf");
+            if let Err(e) = std::fs::write(&config, BUS_CONFIG.replace("{dir}", &dir.display().to_string())) {
+                let _ = std::fs::remove_dir_all(&dir);
+                panic!("cannot write {}: {e}", config.display());
+            }
+            // Its errors go to the test's output, so that a failure to start says why.
+            let spawned = Command::new("dbus-daemon")
+                .arg(format!("--config-file={}", config.display()))
+                .args(["--nofork", "--print-address"])
+                .stdout(Stdio::piped())
+                .spawn();
+            let daemon = match spawned {
+                Ok(daemon) => daemon,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    let _ = std::fs::remove_dir_all(&dir);
+                    eprintln!("skipped: dbus-daemon is not installed");
+                    return None;
+                }
+                Err(e) => panic!("cannot start dbus-daemon: {e}"),
+            };
+            // From here on, a failure drops the bus, which stops the daemon and removes the directory.
+            let mut bus = Self { daemon, address: String::new(), dir };
+            BufReader::new(bus.daemon.stdout.take().unwrap()).read_line(&mut bus.address).unwrap();
+            bus.address = bus.address.trim().to_string();
+            assert!(!bus.address.is_empty(), "dbus-daemon printed no address");
+            Some(bus)
+        }
+
+        fn connect(&self) -> Connection {
+            let mut channel = Channel::open_private(&self.address).unwrap();
+            channel.register().unwrap();
+            Connection::from(channel)
+        }
+    }
+
+    impl Drop for TestBus {
+        fn drop(&mut self) {
+            let _ = self.daemon.kill();
+            let _ = self.daemon.wait();
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    /// Sends a signal with one string, to all or to `to`, and returns once the bus has routed it (the bus handles
+    /// the messages of a connection in order, so its answer to a later call comes after).
+    fn send(conn: &Connection, iface: &str, member: &str, arg: &str, to: Option<&str>) {
+        let mut msg = Message::new_signal("/test", iface, member).unwrap().append1(arg);
+        msg.set_destination(to.map(|t| BusName::new(t).unwrap()));
+        conn.channel().send(msg).unwrap();
+        let bus = conn.with_proxy("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(2));
+        let _: (String,) = bus.method_call("org.freedesktop.DBus", "GetId", ()).unwrap();
+    }
+
+    /// The name that `take_signal` returns within `wait`, processing the messages that arrive meanwhile.
+    fn next_signal(fcitx: &mut Fcitx, wait: Duration) -> Option<String> {
+        let end = Instant::now() + wait;
+        while Instant::now() < end {
+            fcitx.conn.process(Duration::from_millis(10)).unwrap();
+            if let Some(name) = fcitx.take_signal().unwrap() {
+                return Some(name);
+            }
+        }
+        None
+    }
+
+    /// Over a bus, without a tray (as with an input panel): the signals that fcitx5 sends together for one change, of
+    /// any interface, make one read, and the mode they name is kept.
+    #[test]
+    fn signals_of_fcitx5_are_taken_together() {
+        let Some(bus) = TestBus::start("together") else { return };
+        let mut fcitx = Fcitx::with_connection(bus.connect()).unwrap();
+        let fcitx5 = bus.connect();
+        fcitx5.request_name(FCITX5, false, true, true).unwrap();
+        let direct = "/Fcitx/im:Mozc:fcitx-mozc-direct:直接入力:menu,label=あ";
+        send(&fcitx5, PANEL, "RegisterProperties", direct, None);
+        send(&fcitx5, PANEL, "UpdateProperty", direct, None);
+        send(&fcitx5, "org.example.Other", "Enable", "", None);
+        assert_eq!(next_signal(&mut fcitx, Duration::from_secs(2)).as_deref(), Some("Enable"));
+        assert_eq!(fcitx.mozc_mode().as_deref(), Some("direct"));
+        assert_eq!(next_signal(&mut fcitx, Duration::from_millis(100)), None, "one read for the signals of one change");
+    }
+
+    /// Over a bus: signals of another program, and signals addressed to nicola-imesync (also from fcitx5, and the
+    /// bus's own on connecting), are not taken. A signal of fcitx5 to all is.
+    #[test]
+    fn only_signals_of_fcitx5_to_all_are_taken() {
+        let Some(bus) = TestBus::start("senders") else { return };
+        let mut fcitx = Fcitx::with_connection(bus.connect()).unwrap();
+        let me = fcitx.conn.unique_name().to_string();
+        let fcitx5 = bus.connect();
+        fcitx5.request_name(FCITX5, false, true, true).unwrap();
+        let other = bus.connect();
+        let direct = "/Fcitx/im:Mozc:fcitx-mozc-direct:直接入力:menu,label=あ";
+        send(&other, PANEL, "UpdateProperty", direct, None);
+        send(&other, PANEL, "UpdateProperty", direct, Some(&me));
+        send(&fcitx5, PANEL, "UpdateProperty", direct, Some(&me));
+        // A mark that names no mode, sent after them: once it is taken, the signals above have been handled too.
+        send(&fcitx5, PANEL, "Mark", "", None);
+        assert_eq!(next_signal(&mut fcitx, Duration::from_secs(2)).as_deref(), Some("Mark"));
+        assert_eq!(fcitx.mozc_mode(), None);
+
+        send(&fcitx5, PANEL, "UpdateProperty", "/Fcitx/im:Mozc:fcitx-mozc-hiragana:全角かな:menu,label=あ", None);
+        assert_eq!(next_signal(&mut fcitx, Duration::from_secs(2)).as_deref(), Some("UpdateProperty"));
+        assert_eq!(fcitx.mozc_mode().as_deref(), Some("hiragana"));
+    }
+
+    /// Over a bus: the registration of a tray item is recorded and not lost when a signal of fcitx5 follows it
+    /// closely: one read for both, which looks the fcitx5 tray item up again.
+    #[test]
+    fn registration_of_a_tray_item_is_taken_with_others() {
+        let Some(bus) = TestBus::start("tray") else { return };
+        let mut fcitx = Fcitx::with_connection(bus.connect()).unwrap();
+        let fcitx5 = bus.connect();
+        fcitx5.request_name(FCITX5, false, true, true).unwrap();
+        let watcher = bus.connect();
+        watcher.request_name(TRAY_WATCHER, false, true, true).unwrap();
+        send(&watcher, TRAY_WATCHER, ITEM_REGISTERED, ":1.99@/StatusNotifierItem", None);
+        // The tray host goes away, so that looking the tray item up fails at once instead of waiting for an answer.
+        drop(watcher);
+        send(&fcitx5, PANEL, "Enable", "", None);
+        // Take both in without reading: the registration is recorded.
+        let end = Instant::now() + Duration::from_secs(2);
+        loop {
+            if fcitx.signals.lock().unwrap().last.as_deref() == Some("Enable") {
+                break;
+            }
+            assert!(Instant::now() < end, "the signals did not come");
+            fcitx.conn.process(Duration::from_millis(10)).unwrap();
+        }
+        assert!(fcitx.signals.lock().unwrap().item_registered, "the registration is recorded");
+        assert_eq!(fcitx.take_signal().unwrap().as_deref(), Some("Enable"));
+        assert!(!fcitx.signals.lock().unwrap().item_registered, "the tray item is looked up again");
     }
 }

@@ -42,9 +42,10 @@ fn docs_list_the_imesync_options() {
     in_line.sort();
     assert_eq!(in_line, names(&help), "the command line of §4");
 
-    // The table: "| `--port` | … | 23800 |", "| `--on-layer` / `--off-layer` | … | `nicola` / `base` |".
+    // The table: "| `--port` | … | 23800 |", "| `--on-layer` / `--off-layer` | … | `nicola` / `base` |". Only the
+    // rows of options: §4 has other tables.
     let mut table = BTreeMap::new();
-    for row in section.lines().filter(|l| l.starts_with("| `")) {
+    for row in section.lines().filter(|l| l.starts_with("| `-")) {
         let cells: Vec<&str> = row.trim_matches('|').split(" | ").map(str::trim).collect();
         let options: Vec<&str> = cells[0].split('`').skip(1).step_by(2).collect();
         let defaults: Vec<&str> = cells[2].split(" / ").map(|d| d.trim_matches('`')).collect();
