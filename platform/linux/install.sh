@@ -113,6 +113,9 @@ systemctl --user --no-pager --lines=0 status kanata-nicola.service kanata-nicola
 nicola_note_ime
 
 echo "== done"
+# The version installed, and the commit it came from (git describe; none outside a git working tree).
+commit=$(git -C "$repo" describe --tags --always --dirty 2>/dev/null || true)
+echo "$(nicola_version "$dest")${commit:+ (git $commit)}"
 if ((!started)); then
   echo "Installed. Not running yet: it starts at the next login. To start it now: systemctl --user restart kanata-nicola"
 elif systemctl --user is-active --quiet kanata-nicola.service; then

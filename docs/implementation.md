@@ -61,6 +61,7 @@ cargo run --release -p nicola-kbdgen -- [options] [-o <file>]
 | `--split` | 環境固有設定（`defcfg`、Ctrl として扱うキー）を、`-o` の出力先と同じディレクトリの `user-custom.kbd` に分ける（`-o` が必要）。`-o` に出力する配列プロファイル（[設計書 §1.2](design.md#12-用語)）は、それを `include` で読み込む。既存の `user-custom.kbd` が生成する内容と異なる場合は、編集したものとみなして上書きしない | 分けない（1 つのファイルに出力する） |
 | `--force` | `--split` で、既存の環境固有設定も上書きする | — |
 | `-h`、`--help` | 使い方を表示する | — |
+| `-V`、`--version` | バージョンを表示する | — |
 
 ### 2.2 誤りの検査
 
@@ -136,6 +137,7 @@ nicola-imesync [--port <n>] [--fallback-ms <n>] [--im <name>] [--on-layer <name>
 | `--on-layer` / `--off-layer` | NICOLA が ON / OFF のときの kanata のレイヤ | `nicola` / `base` |
 | `--dry-run` | kanata へ送信せず、状態の変化を表示するだけにする | — |
 | `-h`、`--help` | 使い方を表示する | — |
+| `-V`、`--version` | バージョンを表示する | — |
 
 nicola-imesync は、次の処理を繰り返す。
 
@@ -150,11 +152,26 @@ nicola-imesync は、次の処理を繰り返す。
 |---|---|
 | 入力欄のフォーカス | fcitx5 の `org.fcitx.Fcitx.Controller1` の `State`（0 = フォーカスのある入力欄が無い。1 = 入力メソッドが一覧の先頭のもの、2 = それ以外） |
 | 入力メソッド | 同じインタフェースの `CurrentInputMethod`（`mozc`、`keyboard-jp` 等）。フォーカスのあるウィンドウの入力メソッドを返す |
-| Mozc の入力モード | fcitx5 のトレイ項目のメニュー（`com.canonical.dbusmenu`）のアイコン名（`fcitx-mozc-hiragana` 等） |
+| Mozc の入力モード（トレイ） | fcitx5 のトレイ項目のメニュー（`com.canonical.dbusmenu`）のアイコン名（`fcitx-mozc-hiragana` 等） |
+| Mozc の入力モード（入力パネル） | fcitx5 が入力パネル（入力中の文字や変換の候補を表示する、デスクトップの UI）に送信するシグナルの文字列に含まれる、入力モードのアイコン名（現在の入力メソッドのアイコン）。トレイ項目から読み取れない場合に使用する。異なる 2 つ以上の入力モードのアイコン名を含むシグナル（入力モードのメニュー）は使用しない |
 
-fcitx5 の通知は、トレイ項目（`org.kde.StatusNotifierItem`）とそのメニューの D-Bus のシグナルで受信する。fcitx5-mozc のバージョンによる入力モードの示し方の違いと、トレイ項目を作成し直したとき（fcitx5 やデスクトップのトレイの再起動）の探し直し方は、`crates/nicola-imesync/src/main.rs` のコメントにある。
+fcitx5 の通知は、D-Bus のシグナルで受信する。受信するシグナルと、その扱いは次のとおり。
 
-**ログ:** fcitx5 の状態が変化するたびに、1 行を記録する。kanata との接続については、接続したとき、kanata が接続を閉じたとき、接続していた kanata へ送信できなくなったときに、1 行ずつ記録する。ログの例は、次のとおり。
+| 項目 | 内容 |
+|---|---|
+| fcitx5 のシグナル | fcitx5（`org.fcitx.Fcitx5`）が全体に送信するもの。インタフェースは問わない（送信するシグナルは、fcitx5 が使う UI で異なる） |
+| トレイ項目のシグナル | fcitx5 のトレイ項目（`org.kde.StatusNotifierItem`）と、そのメニューのもの |
+| トレイの仕組みのシグナル | トレイ項目の登録の通知（`org.kde.StatusNotifierWatcher` の `StatusNotifierItemRegistered`）。受信したら、fcitx5 のトレイ項目を探し直す |
+| 無視するシグナル | nicola-imesync を宛先にしたもの（同じ利用者のどのプログラムからも送信できるため） |
+| シグナルの内容 | 入力パネルへのシグナルには、入力中の文字が含まれることがある。取り出すのは、入力モードのアイコン名だけである。入力中の文字や変換の候補に、入力モードのアイコン名がそのまま含まれる場合は、次に入力モードが通知されるまで、入力モードを取り違える |
+
+次の細部は、`crates/nicola-imesync/src/main.rs` のコメントにある。
+
+- fcitx5-mozc のバージョンによる、入力モードの示し方の違い
+- 続けて届くシグナルをまとめる間隔
+- トレイ項目を作成し直したとき（fcitx5 やデスクトップのトレイの再起動、fcitx5 の UI の切り替え）の探し直し方
+
+**ログ:** 起動時にバージョンを、fcitx5 の状態が変化するたびにその状態を、1 行ずつ記録する。kanata との接続については、接続したとき、kanata が接続を閉じたとき、接続していた kanata へ送信できなくなったときに、1 行ずつ記録する。ログの例は、次のとおり。
 
 ```text
   12.345s  fcitx5=2 im=mozc mozc=hiragana -> nicola  (by signal NewIcon)
@@ -286,7 +303,8 @@ flowchart TB
 |---|---|
 | 記録先 | 常駐サービスは systemd のユーザジャーナル（`journalctl --user`。見方は[導入と利用 §4](usage.md#4-トラブルへの対処)）。手動起動（`run.sh`）は `target/run/` のファイル（`kanata-<日時>.log`、`imesync-<日時>.log`） |
 | 記録内容（kanata） | 起動・終了、キーボードの取得と切断（`registering`・`removing` など）、警告とエラー。レイヤの切り替えは記録しない（生成する設定ファイルの `defcfg` の `log-layer-changes no`。理由は[設計書 §9](design.md#9-常駐)）。手動起動では、確認のために記録する（`--log-layer-changes`） |
-| 記録内容（nicola-imesync） | IME の状態の変化と、kanata との接続（[§4](#4-ime-同期nicola-imesync)） |
+| 記録内容（`kanata-nicola.service` の起動時） | kanata-nicola のバージョンと、読み込んだ設定ファイル（`config.env`） |
+| 記録内容（nicola-imesync） | バージョン（起動時）、IME の状態の変化、kanata との接続（[§4](#4-ime-同期nicola-imesync)） |
 | 入力した文字 | kanata・nicola-imesync のどちらも記録しない |
 | 保存期間 | kanata-nicola では決めず、システムの journald の設定（`/etc/systemd/journald.conf`）に従う。手動起動のログは、削除するまで残る |
 
@@ -296,7 +314,7 @@ flowchart TB
 
 | 段階 | 内容 | 実行 |
 |---|---|---|
-| 単体 | 配列定義・配列差分ファイルの読み込み、送出の表（配列のすべての文字と、ローマ字で記述した面を送出できること）、kanata 設定生成器の入力の検査、nicola-imesync（ON の条件と、再起動した kanata へのレイヤの送信）。文書と実物の一致（生成済みの設定ファイル `kbd/` が最新であること、文書の表と例、節への参照） | `cargo test --release` |
+| 単体 | 配列定義・配列差分ファイルの読み込み、送出の表（配列のすべての文字と、ローマ字で記述した面を送出できること）、kanata 設定生成器の入力の検査、nicola-imesync（ON の条件、Mozc の入力モードの読み取り、シグナルの受信〔テストが起動する dbus-daemon を使う。dbus-daemon か `XDG_RUNTIME_DIR` が無い環境では飛ばす〕、再起動した kanata へのレイヤの送信）。文書と実物の一致（生成済みの設定ファイル `kbd/` が最新であること、文書の表と例、節への参照） | `cargo test --release` |
 | シミュレーション | kanata をライブラリとして組み込み、生成した設定ファイルで入力列を処理して、出力をケース表の期待値と比較する。ランダムな高速打鍵と、修飾キー・NICOLA 切替キー・配列差分ファイル等の動作も確認する | `cargo test --release` |
 | 設定の組み合わせ | `config.env` の値の組み合わせごとに、`config.sh` が変換する引数から、生成した設定ファイルの動作までを確認する。導入と常駐のスクリプト（`install-files.sh`・`service.sh`・`permissions.sh`）の動作、設定の一覧と既定値が文書と一致することも確認する。bash が必要なため、Linux だけで実行する | `cargo test --release` |
 | E2E | 仮想キーボード → 実際の kanata のプロセス → kanata の出力デバイスの経路で、ケース表を実行する。キーボードの抜き差し、TCP ポートで受け付ける命令、資源使用（CPU・メモリ）も確認する | `cargo run --release -p nicola-e2e` |

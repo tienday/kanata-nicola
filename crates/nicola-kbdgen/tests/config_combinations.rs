@@ -880,6 +880,9 @@ fn service() {
     let out = service("kanata", &[]);
     assert!(out.ok, "{}", out.stderr);
     assert!(out.stdout.starts_with("settings: none"), "{}", out.stdout);
+    // The version, for the log of the unit (not in check, below: install.sh shows it).
+    let version = format!("kanata-nicola {}", env!("CARGO_PKG_VERSION"));
+    assert!(out.stdout.lines().any(|l| l == version), "{}", out.stdout);
     assert_eq!(ran(&out), format!("kanata -c {} --wait-device-ms 0 --no-wait", kbd.display()));
     assert_eq!(std::fs::read_to_string(&kbd).unwrap(), generated(None));
     assert_eq!(service("ime-sync-on", &[]).code, Some(1));
@@ -931,6 +934,16 @@ fn service() {
         assert!(out.stderr.contains("error in the configuration") && !out.stdout.contains(" -c "), "{command}");
     }
     std::fs::remove_file(&check_fails).unwrap();
+
+    // nicola-kbdgen does not run: the version is "?", and 78 when it fails to generate (the unit does not restart), not
+    // its exit status when it fails to tell the version.
+    let kbdgen = inst.join("nicola-kbdgen");
+    std::fs::rename(&kbdgen, dir.join("nicola-kbdgen.real")).unwrap();
+    write_executable(&kbdgen, "#!/bin/sh\necho 'nicola-kbdgen failed' >&2\nexit 1\n");
+    let out = service("kanata", &[]);
+    assert_eq!(out.code, Some(78), "{}", out.stderr);
+    assert!(out.stdout.lines().any(|l| l == "kanata-nicola ?") && !out.stdout.contains(" -c "), "{}", out.stdout);
+    std::fs::rename(dir.join("nicola-kbdgen.real"), &kbdgen).unwrap();
 
     // Mistakes in the settings: 78, with the name of the setting or the file; nicola-imesync does not run.
     for (config_env, message) in [
